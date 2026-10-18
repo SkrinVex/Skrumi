@@ -283,3 +283,6 @@ add_test(NAME brand_audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_D
 
 add_test(NAME language_contracts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_language_contracts.py $<TARGET_FILE:skrumi>)
 set_tests_properties(language_contracts PROPERTIES TIMEOUT 120)
+
+add_test(NAME installer_editors COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_editors.py $<TARGET_FILE:skrumi>)
+set_tests_properties(installer_editors PROPERTIES TIMEOUT 180 LABELS standalone)

@@ -2,7 +2,7 @@
   "name": "skrumi-language",
   "displayName": "Skrumi Programming Language",
   "description": "Официальная поддержка языка Skrumi для VS Code: подсветка, LSP (диагностика по всему проекту, автодополнение, наведение, переход к определению, подсказки параметров), отладчик (точки останова, шаги, переменные, консоль), запуск, проверка и сборка программ",
-  "version": "10.0.0",
+  "version": "10.0.1",
   "publisher": "SkrinVex",
   "license": "MIT",
   "homepage": "https://github.com/SkrinVex/Skrumi",

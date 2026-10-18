@@ -399,7 +399,7 @@ img { max-width: 100%; }
 <header class="hero">
   <div>
     <div class="guide-brand"><img class="language-mark" src="assets/skrumi-mark.svg" width="84" height="84" alt="Логотип Skrumi"><button class="theme-toggle" id="theme" type="button" aria-label="Тема оформления"><svg viewBox="0 0 24 24" aria-hidden="true"><path d=""/></svg></button></div>
-    <p class="eyebrow">Skrumi 10.0.0 · объяснение с нуля</p>
+    <p class="eyebrow">Skrumi 10.0.1 · объяснение с нуля</p>
     <h1>Как устроен язык Skrumi</h1>
     <p class="lede">Что происходит между строчкой <code>print("Привет!");</code> и словом на экране: как язык читает текст, хранит числа и списки, вызывает функции, ловит ошибки, рисует окно точка за точкой, отвечает браузеру и почему для него есть отладчик.</p>
     <a class="try" href="#download">Скачать Skrumi →</a>
@@ -410,7 +410,7 @@ img { max-width: 100%; }
     <div><b>3</b><span>шага от текста до результата</span></div>
     <div><b>273</b><span>встроенных функций</span></div>
     <div><b>17</b><span>модулей библиотеки</span></div>
-    <div><b>134</b><span>автотестов CTest на Linux</span></div>
+    <div><b>135</b><span>автотестов CTest на Linux</span></div>
   </div>
 </header>
 
@@ -725,7 +725,7 @@ close_window();</pre>
         <div class="frame-wrap"><canvas id="frame" width="448" height="280" aria-label="Кадр из пикселей"></canvas></div>
         <div class="frame-status"><code id="frame-code">нажми clear_window, чтобы начать кадр</code><span id="frame-pos"></span></div>
         <label class="frame-text" for="frame-input">Текст для draw_text (шрифт Skrumi, масштаб 1)</label>
-        <input id="frame-input" type="text" value="Skrumi 10.0.0" maxlength="10" spellcheck="false" autocomplete="off">
+        <input id="frame-input" type="text" value="Skrumi 10.0.1" maxlength="10" spellcheck="false" autocomplete="off">
       </div>
 
       <h3>Как рисуются фигуры</h3>
@@ -905,12 +905,12 @@ print(json_value({"ok": true, "n": 3}));   // {"ok":true,"n":3}</pre>
 ├── src/cli/        <i>команда skrumi: запуск, check, test, fmt</i>
 ├── std/            <i>стандартная библиотека на Skrumi</i>
 ├── editors/        <i>расширения для VS Code, Kate и Zed</i>
-├── tests/          <i>134 автотестов CTest на Linux</i>
+├── tests/          <i>135 автотестов CTest на Linux</i>
 ├── docs/           <i>документация</i>
 └── VERSION         <i>номер версии, одно место на весь проект</i></pre>
       <ul class="plain">
         <li><strong>Сборка.</strong> CMake собирает исходники C++ в две программы: <code>skrumi</code> и <code>skrumi-lsp</code>.</li>
-        <li><strong>Тесты.</strong> 134 проверок CTest на Linux: от «2 + 2 = 4» до «окно открылось, кнопку нажали, модальное окно не пропустило клик». Некоторые тесты по-настоящему двигают мышью и нажимают клавиши. Windows запускает свой набор CTest без Linux shell-интеграций. Android instrumentation и проверки WebAssembly, редактора и конструктора в браузере запускаются отдельно и в это число не входят.</li>
+        <li><strong>Тесты.</strong> 135 проверок CTest на Linux: от «2 + 2 = 4» до «окно открылось, кнопку нажали, модальное окно не пропустило клик». Некоторые тесты по-настоящему двигают мышью и нажимают клавиши. Windows запускает свой набор CTest без Linux shell-интеграций. Android instrumentation и проверки WebAssembly, редактора и конструктора в браузере запускаются отдельно и в это число не входят.</li>
         <li><strong>Релизы.</strong> Когда меняется <code>VERSION</code> и изменения попадают в ветку <code>master</code>, GitHub сам собирает версии для Linux, Windows и Android, запускает проверки платформ и публикует проверенные графические установщики, Android SDK/APK и расширения редакторов. Архивы с языком больше не входят в новые релизы.</li>
       </ul>
     </section>
@@ -994,7 +994,7 @@ print(square(4));</pre>
   </article>
 </div>
 
-<footer>Skrumi 10.0.0 · исходники и документация — <a href="https://github.com/SkrinVex/Skrumi" target="_blank" rel="noopener">github.com/SkrinVex/Skrumi</a></footer>
+<footer>Skrumi 10.0.1 · исходники и документация — <a href="https://github.com/SkrinVex/Skrumi" target="_blank" rel="noopener">github.com/SkrinVex/Skrumi</a></footer>
 
 <script type="application/json" id="bench-data">
 {"version":"8.1.0","date":"2026-09-25","machine":{"os":"Linux x86_64","cpu":"Intel(R) Celeron(R) N4020C CPU @ 1.10GHz"},"runs":5,"languages":{"skrumi":{"name":"Skrumi","version":"Skrumi 8.1.0"},"skrumi_baseline":{"name":"Skrumi (previous)","version":"Skrumi 8.0.0"},"python":{"name":"Python","version":"Python 3.14.7"},"lua":{"name":"Lua","version":"Lua 5.4.9"},"javascript":{"name":"JavaScript (Node.js)","version":"v26.10.0"}},"benchmarks":[{"name":"array_sum","about":"Growing an array and reading it back by index.","seconds":{"skrumi":0.8220495040004607,"skrumi_baseline":0.8046430410031462,"python":0.11204682500101626,"lua":0.04474602800473804,"javascript":0.08812319800199475}},{"name":"fib","about":"Function calls: naive recursive Fibonacci.","seconds":{"skrumi":0.6164286349958275,"skrumi_baseline":0.6133975439952337,"python":0.07494633600435918,"lua":0.02926724500139244,"javascript":0.07089768599689705}},{"name":"json_roundtrip","about":"Turning records into JSON text and back.","seconds":{"skrumi":0.3555030940042343,"skrumi_baseline":0.34874510599911446,"python":0.20824911999807227,"javascript":0.135121507999429}},{"name":"loop","about":"Integer arithmetic in a tight loop.","seconds":{"skrumi":2.797177840999211,"skrumi_baseline":2.7681683769988013,"python":0.5878342849973706,"lua":0.10385304999363143,"javascript":0.08476455699565122}},{"name":"map_lookup","about":"Inserting keys into a map and looking every one of them up.","seconds":{"skrumi":0.6534529349955847,"skrumi_baseline":null,"python":0.28541876199597027,"lua":0.6466928770023515,"javascript":0.4442104150002706}},{"name":"records","about":"Creating many small records and reading their fields.","seconds":{"skrumi":0.9637308169985772,"skrumi_baseline":0.9543194729994866,"python":0.25225184000009904,"lua":0.19137996299832594,"javascript":0.13434408799366793}},{"name":"sort_numbers","about":"Sorting numbers with the language's own sort.","seconds":{"skrumi":0.5961958159969072,"skrumi_baseline":0.5898370669965516,"python":0.25797608100401703,"lua":0.254622147003829,"javascript":0.23630277100164676}},{"name":"split_join","about":"Building text, joining and splitting it.","seconds":{"skrumi":0.600587403998361,"skrumi_baseline":19.539538478995382,"python":0.14139736899960553,"lua":0.4179613119995338,"javascript":0.17239006900490494}}]}

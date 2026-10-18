@@ -41,6 +41,31 @@ def brand_png(svg):
     return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 128,128,8,6,0,0,0)) +
             chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
 
+def prepare_editors(resources, version):
+    # Editor resources are installed only when selected; no network is needed.
+    editor_resources = resources/'editors'; editor_resources.mkdir()
+    editor_records = []
+    vscode = editor_resources/'vscode'; vscode.mkdir()
+    # Explicit runtime files: never embed local build caches, tests or credentials.
+    vscode_files = ['package.json', 'language-configuration.json', 'README.md',
+                    'syntaxes/skrumi.tmLanguage.json', 'client/extension.js',
+                    'client/run.js', 'client/debug.js', 'LICENSE']
+    for name in vscode_files:
+        source = ROOT/'LICENSE' if name == 'LICENSE' else ROOT/'editors/vscode'/name
+        destination = vscode/name; destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        editor_records.append([f'vscode/skrinvex.skrumi-language-{version}/{name}', f'vscode/{name}'])
+    (vscode/'installation.json').write_text('[]', encoding='utf-8')
+    editor_records.append([f'vscode/skrinvex.skrumi-language-{version}/installation.json', 'vscode/installation.json'])
+    kate = editor_resources/'kate'; kate.mkdir()
+    for name, source in [('syntax', 'skrumi.xml'), ('lsp.json', 'settings.json'), ('dap.json', 'dap.json')]:
+        shutil.copyfile(ROOT/'editors/kate'/source, kate/name)
+        editor_records.append(['kate/'+name.removesuffix('.json'), 'kate/'+name])
+    for action in ['run', 'check', 'build']:
+        shutil.copyfile(ROOT/f'editors/kate/externaltools/skrumi-{action}.ini', kate/action)
+        editor_records.append(['kate/'+action, 'kate/'+action])
+    (editor_resources/'manifest.json').write_text(json.dumps(editor_records), encoding='utf-8')
+
 def build(binary, lsp, output):
     platform = 'windows' if sys.platform == 'win32' else 'linux'
     suffix = '.exe' if platform == 'windows' else ''
@@ -66,6 +91,7 @@ def build(binary, lsp, output):
         (payload/'std').mkdir()
         for module in sorted((ROOT/'std').glob('*.skm')):
             shutil.copyfile(module, payload/'std'/module.name)
+        prepare_editors(resources, version)
         def describe(folder, records, mode):
             (folder/'manifest.json').write_text(json.dumps([version,platform,arch,records]), encoding='utf-8')
             (folder/'installer-mode').write_text(mode, encoding='utf-8')
@@ -82,7 +108,7 @@ def build(binary, lsp, output):
             digest = hashlib.sha256((payload/'@maintenance.exe').read_bytes()).hexdigest()
             (payload/'@maintenance.json').write_text(json.dumps(['Skrumi maintenance v1', version, digest]), encoding='utf-8')
         records = [[file.relative_to(payload).as_posix(), hashlib.sha256(file.read_bytes()).hexdigest(),
-                    '600' if file.name == '@maintenance.json' else '644' if file.parent.name == 'std' else '755']
+                    '600' if file.name == '@maintenance.json' else '644' if file.parent.name == 'std' or 'editors' in file.relative_to(payload).parts else '755']
                    for file in sorted(payload.rglob('*')) if file.is_file()]
         describe(resources, records, 'full')
         subprocess.run([str(binary), 'build', str(ROOT/'installer/main.skm'), '--resources', str(resources),

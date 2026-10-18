@@ -1,6 +1,18 @@
 // Installer presentation only; persisted formats and paths are never translated.
 string setup_language = "en";
 array setup_translations = [
+    ["Previously selected", "Выбран ранее"],
+    ["Editor integrations...", "Интеграции редакторов..."],
+    ["Editor integrations", "Интеграции редакторов"],
+    ["Select detected editors. Restart them after installation.", "Выберите найденные редакторы. После установки перезапустите их."],
+    ["Detected", "Обнаружен"],
+    ["Not detected", "Не обнаружен"],
+    ["Kate: enable LSP Client / External Tools in Plugins.", "Kate: включите LSP Client / Внешние инструменты в модулях."],
+    ["Detect again", "Найти снова"],
+    ["Editor file changed; preserved: ", "Файл редактора изменён и сохранён: "],
+    ["Existing Skrumi editor settings preserved: ", "Существующие настройки Skrumi сохранены: "],
+    ["Existing editor file preserved: ", "Существующий файл редактора сохранён: "],
+
     ["Uninstall...", "Удалить..."],
     ["Uninstall Skrumi", "Удаление Skrumi"],
     ["Installation to remove", "Каталог удаляемой установки"],

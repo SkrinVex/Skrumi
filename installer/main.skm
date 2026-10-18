@@ -10,8 +10,8 @@ array setup_args = os_args();
 if (size(setup_args) == 2 && setup_args[0] == "--uninstall-gui") {
     setup_target = setup_args[1]; setup_remove_requested = true;
 } else if (size(setup_args) > 0) {
-    if ((size(setup_args) < 3 || size(setup_args) > 5) || setup_args[0] != "--headless") {
-        print("Usage: installer --headless install|uninstall|recover DIRECTORY [--path] [--no-lsp]"); exit(2);
+    if ((size(setup_args) < 3 || size(setup_args) > 7) || setup_args[0] != "--headless") {
+        print("Usage: installer --headless install|uninstall|recover DIRECTORY [--path] [--no-lsp] [--vscode] [--kate]"); exit(2);
     }
     try {
         if (setup_args[1] == "recover") {
@@ -21,11 +21,14 @@ if (size(setup_args) == 2 && setup_args[0] == "--uninstall-gui") {
         else {
             if (setup_args[1] != "install" && setup_args[1] != "uninstall") { fail(setup_tr("Unknown operation")); }
             if (setup_maintenance && setup_args[1] == "install") { fail(setup_tr("Download the full installer to install or update Skrumi")); }
+            if (setup_args[1] == "uninstall" && size(setup_args) != 3) { fail(setup_tr("Unknown or duplicate option")); }
             bool with_path = false;
             bool with_lsp = true;
             for (int i = 3; i < size(setup_args); i++) {
                 if (setup_args[i] == "--path" && !with_path) { with_path = true; }
                 else if (setup_args[i] == "--no-lsp" && with_lsp) { with_lsp = false; }
+                else if (setup_args[i] == "--vscode" && !editor_wanted("vscode")) { push(editor_selected, "vscode"); }
+                else if (setup_args[i] == "--kate" && !editor_wanted("kate")) { push(editor_selected, "kate"); }
                 else { fail(setup_tr("Unknown or duplicate option")); }
             }
             tx_include_lsp = with_lsp;
@@ -33,6 +36,7 @@ if (size(setup_args) == 2 && setup_args[0] == "--uninstall-gui") {
             while (!location_step()) { wait(1); }
         }
         print(tx_message);
+        if (tx_warning != "") { print(tx_warning); }
     } catch (string error) {
         print(error);
         try { location_cancel(); } catch (string recovery_error) { print(setup_tr("Recovery required: ") + recovery_error); }
@@ -56,6 +60,26 @@ bool setup_remove_confirm = false;
 bool setup_uninstall = setup_maintenance || setup_remove_requested;
 bool setup_path = true;
 bool setup_lsp = true;
+array setup_editor_names = ["vscode", "kate"];
+array setup_editor_commands = ["code", "kate"];
+array setup_editor_found = ["", ""];
+void setup_detect_editors() {
+    for (int i = 0; i < 2; i++) { setup_editor_found[i] = editor_find(setup_editor_commands[i]); }
+}
+void setup_restore_editors() {
+    editor_selected = [];
+    string marker = path_join(setup_target, TX_MARKER);
+    if (!fs_exists_checked(marker)) { return; }
+    array installed = json_decode(read_checked(marker));
+    if (size(installed) == 6 && installed[0] == "Skrumi installation v4") {
+        array integrations = installed[5];
+        for (int i = 0; i < size(integrations); i++) {
+            string kind = str_split(integrations[i][0], "/")[0];
+            if (!editor_wanted(kind)) { push(editor_selected, kind); }
+        }
+    }
+}
+
 string setup_error = "";
 bool setup_error_dialog = setup_error != "";
 int setup_scroll = 0;
@@ -138,6 +162,7 @@ while (window_poll()) {
                 setup_existing = location_discover();
                 if (setup_existing != "" && !setup_remove_requested) { setup_target = setup_existing; }
                 setup_recovery_confirm = fs_exists_checked(path_absolute(setup_target) + ".skrumi-transaction");
+                setup_detect_editors(); setup_restore_editors();
                 setup_error = ""; setup_error_dialog = false;
             } catch (string error) { setup_error = error; setup_error_dialog = true; }
 
@@ -189,7 +214,7 @@ while (window_poll()) {
         string path_hint = setup_tr("Applies when your shell reads its profile; a new terminal may not be enough.");
         if (os_platform() == "windows") { path_hint = setup_tr("Restart the terminal app; running programs keep their environment."); }
         setup_text(48, options_y + 60, path_hint, 12, UI_MUTED);
-        if (!setup_locations_open) { setup_text(48, 378, setup_tr("User projects and modified files are preserved."), 14, UI_MUTED); }
+        if (!setup_locations_open && setup_button("editors", 48, 378, 340, 32, setup_tr("Editor integrations..."))) { setup_detect_editors(); setup_screen = 4; }
         int recovery_y = 426; if (setup_locations_open) { recovery_y = 466; }
         // Recheck the selected directory, including changes made by another process.
         bool recovery_available = false;
@@ -212,6 +237,25 @@ while (window_poll()) {
         string action = setup_tr("Install");
         if (setup_existing != "") { action = setup_tr("Update"); }
         if (setup_primary("install", 620, 536, 148, 30, action)) { setup_locations_open = false; setup_begin_operation(false); }
+    } else if (setup_screen == 4) {
+        setup_text(48, 144, setup_tr("Editor integrations"), 26, UI_TEXT);
+        setup_text(48, 192, setup_tr("Select detected editors. Restart them after installation."), 14, UI_MUTED);
+        array labels = ["Visual Studio Code", "Kate"];
+        array next_selection;
+        for (int i = 0; i < 2; i++) {
+            int y = 236 + i * 64;
+            bool selected = editor_wanted(setup_editor_names[i]);
+            if (setup_editor_found[i] != "" || selected) {
+                selected = setup_checkbox("editor-" + setup_editor_names[i], 48, y, labels[i], selected);
+                string status = setup_tr("Detected"); if (setup_editor_found[i] == "") { status = setup_tr("Previously selected"); }
+                setup_text(72, y + 23, status, 12, UI_MUTED);
+            } else { setup_text(48, y, labels[i] + " — " + setup_tr("Not detected"), 14, UI_MUTED); }
+            if (selected) { push(next_selection, setup_editor_names[i]); }
+        }
+        editor_selected = next_selection;
+        setup_text(48, 432, setup_tr("Kate: enable LSP Client / External Tools in Plugins."), 14, UI_MUTED);
+        if (setup_button("rescan-editors", 48, 536, 204, 30, setup_tr("Detect again"))) { setup_detect_editors(); }
+        if (setup_primary("editors-done", 620, 536, 148, 30, setup_tr("Back"))) { setup_screen = 1; }
     } else if (setup_screen == 3) {
         setup_uninstall = true;
         setup_text(48, 144, setup_tr("Uninstall Skrumi"), 26, UI_TEXT);
@@ -257,7 +301,7 @@ while (window_poll()) {
         string error_answer = ui_dialog("error", setup_tr("Setup error"), setup_tr("The operation could not be completed. Details: ") + setup_error, "error");
         if (error_answer != "pending") { setup_error_dialog = false; setup_screen = setup_options_screen(); }
     }
-    if (tx_warning != "" && !setup_confirm && setup_error == "") {
+    if (tx_warning != "" && !setup_running && tx_phase == "committed" && !setup_confirm && setup_error == "") {
         string warning_answer = ui_dialog("cleanup-warning", setup_tr("Installation completed"), tx_warning, "info");
         if (warning_answer != "pending") { tx_warning = ""; }
     }
