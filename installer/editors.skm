@@ -1,0 +1,165 @@
+// Editor integration is per-user. Only these destinations may appear in a journal.
+array editor_selected;
+array editor_changes;
+array editor_owned;
+
+string editor_destination(string id) {
+    if (str_starts_with(id, "vscode/")) {
+        string relative = str_substring(id, 7);
+        array parts = str_split(relative, "/");
+        if (size(parts) < 2 || !str_starts_with(parts[0], "skrinvex.skrumi-language-")) { fail("Invalid VS Code integration path"); }
+        return safe_join(path_join(os_user_dir("home"), ".vscode/extensions"), relative);
+    }
+    if (id == "kate/syntax") { return safe_join(os_user_dir("data"), "org.kde.syntax-highlighting/syntax/skrumi.xml"); }
+    if (id == "kate/lsp") { return safe_join(os_user_dir("config"), "kate/lspclient/settings.json"); }
+    if (id == "kate/dap") { return safe_join(os_user_dir("config"), "kate/debugger/dap.json"); }
+    for (int i = 0; i < 3; i++) {
+        string action = ["run", "check", "build"][i];
+        if (id == "kate/" + action) { return safe_join(os_user_dir("config"), "kate/externaltools/skrumi-" + action + ".ini"); }
+    }
+    fail("Invalid editor integration path: " + id); return "";
+}
+array editor_snapshot(string id) {
+    string path = editor_destination(id);
+    if (!fs_exists_checked(path)) {
+        string mode = "rw-r--r--"; if (os_platform() == "windows") { mode = "rw-rw-rw-"; }
+        return [false, "", mode];
+    }
+    return [true, read_checked(path), fs_permissions(path)];
+}
+void editor_validate(array plans) {
+    array ids;
+    for (int i = 0; i < size(plans); i++) {
+        array record = plans[i];
+        if (size(record) != 3 || size(record[1]) != 3 || size(record[2]) != 3) { fail("Invalid editor journal"); }
+        editor_destination(record[0]);
+        for (int j = 0; j < size(ids); j++) { if (ids[j] == record[0]) { fail("Duplicate editor journal entry"); } }
+        push(ids, record[0]);
+    }
+}
+void editor_apply(array plans, bool reverse) {
+    editor_validate(plans);
+    string errors = "";
+    for (int step = 0; step < size(plans); step++) {
+        int i = step; if (reverse) { i = size(plans) - step - 1; }
+        array record = plans[i]; array before = record[1]; array after = record[2];
+        if (reverse) { before = record[2]; after = record[1]; }
+        try {
+            array current = editor_snapshot(record[0]);
+            if (json_value(current) != json_value(after)) {
+                if (json_value(current) != json_value(before)) { fail(setup_tr("Editor file changed; preserved: ") + editor_destination(record[0])); }
+                string path = editor_destination(record[0]);
+                if (after[0]) {
+                    make_dirs_checked(path_parent(path)); fs_write_atomic(path, after[1]);
+                    if (!fs_set_permissions(path, after[2])) { fail("Cannot set editor file permissions"); }
+                } else { fs_remove_checked(path); }
+            }
+        } catch (string error) { if (!reverse) { fail(error); } errors += error + "\n"; }
+    }
+    if (errors != "") { fail(errors); }
+}
+// Do not execute discovered programs while rendering the options screen.
+string editor_find(string name) {
+    array candidates;
+    string separator = ":"; string suffix = "";
+    if (os_platform() == "windows") { separator = ";"; suffix = ".exe"; }
+    array paths = str_split(env_get("PATH"), separator);
+    for (int i = 0; i < size(paths); i++) {
+        if (paths[i] != "" && path_absolute(paths[i]) == paths[i]) {
+            push(candidates, path_join(paths[i], name + suffix));
+            if (name == "code" && os_platform() == "windows") { push(candidates, path_join(paths[i], "code.cmd")); }
+        }
+    }
+    if (os_platform() == "windows") {
+        array roots = [os_user_dir("data"), env_get("ProgramFiles"), env_get("ProgramFiles(x86)")];
+        for (int i = 0; i < size(roots); i++) {
+            if (roots[i] != "") {
+                if (name == "code") { push(candidates, path_join(roots[i], "Microsoft VS Code/Code.exe")); push(candidates, path_join(roots[i], "Programs/Microsoft VS Code/Code.exe")); }
+                if (name == "kate") { push(candidates, path_join(roots[i], "Kate/bin/kate.exe")); push(candidates, path_join(roots[i], "Programs/Kate/bin/kate.exe")); }
+            }
+        }
+    } else {
+        for (int i = 0; i < 3; i++) { push(candidates, path_join(["/usr/bin", "/usr/local/bin", path_join(os_user_dir("home"), ".local/bin")][i], name)); }
+        if (name == "code") { push(candidates, "/usr/share/code/bin/code"); }
+    }
+    for (int i = 0; i < size(candidates); i++) { if (fs_is_file(candidates[i]) && fs_is_executable(candidates[i])) { return candidates[i]; } }
+    return "";
+}
+bool editor_wanted(string name) {
+    for (int i = 0; i < size(editor_selected); i++) { if (editor_selected[i] == name) { return true; } }
+    return false;
+}
+// Merge only our server/profile into shared JSON; other editor settings survive.
+string editor_json(string id, string content, string root) {
+    map document = {};
+    if (content != "") { document = json_decode(content); }
+    string key = "servers"; if (id == "kate/dap") { key = "dap"; }
+    map section = get_or(document, key, {});
+    if (has(section, "skrumi")) { fail(setup_tr("Existing Skrumi editor settings preserved: ") + editor_destination(id)); }
+    string suffix = ""; if (os_platform() == "windows") { suffix = ".exe"; }
+    map supplied = json_decode(resource_read("editors/" + id + ".json"));
+    map entry = supplied[key]["skrumi"];
+    if (id == "kate/lsp") { entry["command"] = [path_join(root, "skrumi-lsp" + suffix)]; }
+    else { entry["run"]["command"] = [path_join(root, "skrumi" + suffix), "debug-adapter"]; }
+    section["skrumi"] = entry; document[key] = section;
+    return json_value(document);
+}
+// Restore our JSON member while retaining unrelated edits made since installation.
+array editor_restore_json(array record, array current) {
+    string key = "servers"; if (record[0] == "kate/dap") { key = "dap"; }
+    if (!current[0]) { return current; }
+    map document = json_decode(current[1]);
+    map members = get_or(document, key, {});
+    map installed = json_decode(record[2][1]);
+    if (json_value(get_or(members, "skrumi", null)) != json_value(installed[key]["skrumi"])) {
+        fail(setup_tr("Existing Skrumi editor settings preserved: ") + editor_destination(record[0]));
+    }
+    remove_key(members, "skrumi");
+    map original = {}; if (record[1][0]) { original = json_decode(record[1][1]); }
+    if (size(members) == 0 && !has(original, key)) { remove_key(document, key); }
+    else { document[key] = members; }
+    if (json_value(current) == json_value(record[2])) { return record[1]; }
+    return [true, json_value(document), current[2]];
+}
+void editor_plan(array previous, string root, bool uninstall, bool lsp) {
+    editor_validate(previous); editor_changes = []; editor_owned = [];
+    // Undo owned snapshots first in the plan, not on disk. Changed files stay untouched.
+    array desired;
+    if (!uninstall && size(editor_selected) > 0) { desired = json_decode(resource_read("editors/manifest.json")); }
+    for (int i = 0; i < size(previous); i++) {
+        array record = previous[i]; array current = editor_snapshot(record[0]);
+        if (record[0] == "kate/lsp" || record[0] == "kate/dap") {
+            try { push(editor_changes, [record[0], current, editor_restore_json(record, current)]); }
+            catch (string error) { if (!uninstall) { fail(error); } tx_note(error); }
+        } else if (json_value(current) != json_value(record[2])) {
+            if (!uninstall) { fail(setup_tr("Editor file changed; preserved: ") + editor_destination(record[0])); }
+            tx_note(setup_tr("Editor file changed; preserved: ") + editor_destination(record[0]));
+        } else { push(editor_changes, [record[0], current, record[1]]); }
+    }
+    for (int i = 0; i < size(desired); i++) {
+        array item = desired[i]; string id = item[0];
+        string kind = str_split(id, "/")[0];
+        if (!editor_wanted(kind) || id == "kate/lsp" && !lsp) { continue; }
+        array before = editor_snapshot(id); array original = before;
+        int replaced = -1;
+        for (int j = 0; j < size(editor_changes); j++) {
+            if (editor_changes[j][0] == id) { original = editor_changes[j][2]; replaced = j; }
+        }
+        string content = resource_read("editors/" + item[1]);
+        if (id == "kate/lsp" || id == "kate/dap") { content = editor_json(id, original[1], root); }
+        else {
+            if (original[0]) { fail(setup_tr("Existing editor file preserved: ") + editor_destination(id)); }
+            if (str_ends_with(id, "/installation.json")) { content = json_value([root]); }
+            if (kind == "kate" && id != "kate/syntax") {
+                string executable = path_join(root, "skrumi"); if (os_platform() == "windows") { executable += ".exe"; }
+                // KConfig value escaping (not shell quoting).
+                executable = str_replace(str_replace(executable, "\\", "\\\\"), "\n", "\\n");
+                content = str_replace(content, "executable=skrumi", "executable=" + executable);
+            }
+        }
+        array after = [true, content, original[2]];
+        array change = [id, before, after];
+        if (replaced >= 0) { editor_changes[replaced] = change; } else { push(editor_changes, change); }
+        push(editor_owned, [id, original, after]);
+    }
+}

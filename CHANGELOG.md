@@ -1,3 +1,19 @@
+# Skrumi 10.0.1 — optional editor integration in GUI setup
+
+- Detect native VS Code and Kate installations on Windows/Linux and offer
+  independent opt-in choices, rescan and restoration of previous selections.
+- Install VS Code extension files offline in the user extension directory, with
+  a private runtime/LSP path hint for custom installation directories.
+- Install Kate syntax/external tools and merge the Skrumi LSP/debug profiles into
+  existing JSON without replacing other profiles. Plugins remain user-controlled.
+- Leave Zed installation manual; its dev-extension sources are not bundled in setup.
+- Extend transaction journals to v4 for editor snapshots: install, update,
+  deselection, cancellation, process interruption, recovery and uninstall.
+  Preserve edited/unmanaged files and unrelated Kate configuration changes;
+  continue reading older journals/manifests. No installer visual redesign.
+- Add standalone regression coverage for integration ownership and recovery,
+  and update component versions consistently. No language or VM changes.
+
 # Skrumi 10.0.0 — explicit narrowing and deterministic calls
 
 - Breaking: implicit float-to-int narrowing is rejected for declarations,

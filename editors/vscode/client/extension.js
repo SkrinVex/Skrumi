@@ -18,6 +18,11 @@ function log(msg) {
 
 function installationHome() {
     if (process.env.SKRUMI_HOME) return process.env.SKRUMI_HOME;
+    try {
+        const [installed] = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'installation.json'), 'utf8'));
+        if (typeof installed === 'string' && path.isAbsolute(installed)) return installed;
+    } catch (_) { /* Marketplace/manual installs have no installer path hint. */ }
+
     if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
         return path.join(process.env.LOCALAPPDATA, 'Skrumi');
     }

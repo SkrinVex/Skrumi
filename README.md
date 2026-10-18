@@ -202,6 +202,9 @@ python3 packaging/build_android.py examples/raycaster.skm --name "Лабирин
 встроенных функций и модулей берутся из того же каталога, по которому работает
 рантайм, поэтому подсказки всегда совпадают с языком.
 
+В графическом установщике 10.0.1 доступен выбор обнаруженных редакторов:
+VS Code и Kate настраиваются автоматически. Zed устанавливается вручную. [Подробности и ограничения](docs/GUI_INSTALLER.md#выбор-редакторов-1001).
+
 * **VS Code** (подсветка, LSP, кнопка ▶ запуска, отладка по F5, проверка и сборка): установите `skrumi.vsix` из [последнего выпуска](https://github.com/SkrinVex/Skrumi/releases/latest/download/skrumi.vsix)
   командой `code --install-extension skrumi.vsix`.
 * **Kate**: подсветка [`editors/kate/skrumi.xml`](editors/kate/skrumi.xml), настройки

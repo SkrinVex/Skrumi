@@ -1,6 +1,6 @@
 id = "skrumi"
 name = "Skrumi"
-version = "10.0.0"
+version = "10.0.1"
 schema_version = 1
 authors = ["SkrinVex <skrinvex@gmail.com>"]
 description = "Official Skrumi language support for Zed: syntax highlighting, brackets, LSP integration (diagnostics, completions, hover, goto definition) and a debugger."

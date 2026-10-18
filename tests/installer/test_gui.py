@@ -97,6 +97,12 @@ with tempfile.TemporaryDirectory(prefix='skrumi-gui-') as temporary:
         window.type_text(str(target))
         time.sleep(.15)
         screenshot('options')
+        click(180,394)
+        wait_until(lambda: window.pixel(630,540) == 0xef7b35)
+        screenshot('editor-selection')
+        click(140,550)  # rescan; never selects an integration implicitly
+        click(700,550)  # return to installation options
+        time.sleep(.15)
         click(680,236)
         for row in range(3):
             assert window.pixel(50,270+row*28) != 0xef7b35
