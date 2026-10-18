@@ -94,6 +94,9 @@ with tempfile.TemporaryDirectory(prefix='skrumi environment ') as temp:
                                     env=env, cwd=root, capture_output=True, text=True, timeout=15)
             assert result.returncode == 0, result.stderr
             assert result.stdout.splitlines().count(str(fish_target)) == 1, result.stdout
+            startup = subprocess.run([fish, '-c', r'printf "%s\\n" $PATH'],
+                                     env=env, cwd=root, capture_output=True, text=True, timeout=15)
+            assert startup.returncode == 0 and startup.stdout.splitlines().count(str(fish_target)) == 1, startup
             assert not (root/'INJECTED').exists()
         else:
             print('Fish executable unavailable: native shell execution skipped')

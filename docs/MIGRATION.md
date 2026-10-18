@@ -19,6 +19,19 @@ The VERSION file is the authoritative version number.
   transactional rollback. Existing POSIX/zsh plans can still be removed using
   their recorded destination even if the login shell has changed.
 
+For a module-level array initialized during import, keep allocation inside the
+initializer: imports execute declarations but skip standalone top-level calls.
+A small ordinary function supplies that initializer without special syntax:
+
+```cpp
+array make_zeros(int count) {
+    array result;
+    resize(result, count);
+    return result;
+}
+array zeros = make_zeros(3);
+```
+
 Known narrowing is diagnosed by check/LSP. Untyped parameters, dynamic function
 values and container contents still require runtime checks; check is not a proof
 that a program cannot fail.

@@ -64,8 +64,8 @@ call_dynamic([]);
     code = "int size(a,b) { return 7; } size([]);"
     run(code, check=True, ok=False)
     run(code, ok=False)
-    (root/"routes.skm").write_text("int get(path, handler) { return 42; }")
-    run('using routes as routes; int get(a,b) { return 99; } assert_equal(routes.get("/", 1), 42); assert_equal(get([], 0), 99);')
+    (root/"routes.skm").write_text("array make_zeros(int n) { array a; resize(a,n); return a; } array zeros = make_zeros(3); int get(path, handler) { return 42; }")
+    run('using routes as routes; int get(a,b) { return 99; } assert_equal(routes.zeros, [0,0,0]); assert_equal(routes.get("/", 1), 42); assert_equal(get([], 0), 99);')
     source = root/"contract.skm"
     source.write_text(positive)
     app = root/("app.exe" if os.name == "nt" else "app")
