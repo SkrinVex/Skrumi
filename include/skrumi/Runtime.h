@@ -12,9 +12,7 @@ namespace runtime {
 struct Builtin;
 const Builtin* findBuiltin(const std::string& name);
 const BuiltinSpec& specOf(const Builtin& builtin);
-// True when the arguments fit the builtin's parameter count and types. A Skrumi
-// function with the same name is called instead when they do not.
-bool acceptsArguments(const Builtin& builtin, Arguments args);
+// Invoke this builtin; mismatched arguments are errors, never overload fallback.
 Value invoke(const Builtin& builtin, Arguments args, Context& ctx);
 
 bool isBuiltin(const std::string& name);

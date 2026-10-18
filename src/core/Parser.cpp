@@ -492,7 +492,7 @@ std::unique_ptr<Node> Parser::declaration(bool global) {
     return at(std::make_unique<VarDeclNode>(type, name.value, std::move(value), name.range, global), start, previousEnd());
 }
 
-// array name size;  array name = value;  array name;  array name(params) { ... }
+// array name = value;  array name;  array name(params) { ... }
 // Element types are checked where they are written: map<string, T> only, and a known
 // type name inside.
 void Parser::checkContainerType(const std::string& type) {
@@ -513,11 +513,11 @@ std::unique_ptr<Node> Parser::arrayDeclaration(bool global, SourcePosition start
     if (!global && looksLikeFunction()) return functionDefinition(type, name, start);
     std::unique_ptr<ArrayDeclNode> node;
     if (match(TokenType::ASSIGN)) {
-        node = std::make_unique<ArrayDeclNode>(name.value, nullptr, expression(), name.range);
+        node = std::make_unique<ArrayDeclNode>(name.value, expression(), name.range);
     } else if (check(TokenType::SEMICOLON)) {
-        node = std::make_unique<ArrayDeclNode>(name.value, nullptr, nullptr, name.range);
+        node = std::make_unique<ArrayDeclNode>(name.value, nullptr, name.range);
     } else {
-        node = std::make_unique<ArrayDeclNode>(name.value, expression(), nullptr, name.range);
+        error("Expected = or ; after array name; use array name; resize(name, length);");
     }
     node->global = global;
     node->type = type;

@@ -306,7 +306,7 @@ void addCoreBuiltins(std::vector<Builtin>& out) {
 
     // Types and conversions
     add({"type_of", "string", {{"any", "value"}}, 1, false, "",
-         "Имя типа значения: `int`, `float`, `string`, `bool`, `array`, `map` или имя структуры."},
+         "Имя типа значения: `int`, `float`, `string`, `bool`, `array`, `map`, `null`, `func` или имя структуры/перечисления."},
         [](Call& c) { return text(c.at(0).typeName()); });
     add({"to_int", "int", {{"any", "value"}}, 1, false, "",
          "Преобразует в `int`: дробное число отбрасывает дробную часть, строка должна содержать число, "

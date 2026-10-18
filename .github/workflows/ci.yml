@@ -50,7 +50,7 @@ jobs:
           python-version: '3.x'
       - uses: docker/setup-buildx-action@v3
       - name: Install native-window test dependencies
-        run: sudo apt-get update && sudo apt-get install -y xvfb libx11-6 openbox
+        run: sudo apt-get update && sudo apt-get install -y xvfb libx11-6 openbox fish
       - name: Build static musl binaries and run CTest inside Alpine
         run: docker buildx build --target portable --output type=local,dest=build-portable .
       - name: Verify no shared libraries and run standalone tests on Ubuntu
@@ -124,7 +124,7 @@ jobs:
 
       - name: Install Linux graphics development and test packages
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libxcb1-dev libxau-dev libxdmcp-dev xvfb libx11-6 openbox
+        run: sudo apt-get update && sudo apt-get install -y libxcb1-dev libxau-dev libxdmcp-dev xvfb libx11-6 openbox fish
 
       - name: Configure CMake
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release

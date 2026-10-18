@@ -95,18 +95,18 @@ int main() {
         TEST_ASSERT(input && dynamic_cast<skrumi::FuncCallNode*>(input->expr.get()));
     }
 
-    // 7. Array forms: sized, literal, empty, indexing and element assignment
+    // 7. Array forms: empty, literal, empty, indexing and element assignment
     {
-        auto program = parse("array a 3; array b = [1, \"x\", [2]]; array c; a[0] = b[1]; a[i + 1] += 2;");
+        auto program = parse("array a; array b = [1, \"x\", [2]]; array c; a[0] = b[1]; a[i + 1] += 2;");
         TEST_ASSERT(program->stmts.size() == 5);
         auto* sized = dynamic_cast<skrumi::ArrayDeclNode*>(program->stmts[0].get());
-        TEST_ASSERT(sized && sized->sizeNode && !sized->initializer);
+        TEST_ASSERT(sized && !sized->initializer);
         auto* literal = dynamic_cast<skrumi::ArrayDeclNode*>(program->stmts[1].get());
         TEST_ASSERT(literal && literal->initializer);
         auto* elements = dynamic_cast<skrumi::ArrayLiteralNode*>(literal->initializer.get());
         TEST_ASSERT(elements && elements->elements.size() == 3);
         auto* empty = dynamic_cast<skrumi::ArrayDeclNode*>(program->stmts[2].get());
-        TEST_ASSERT(empty && !empty->sizeNode && !empty->initializer);
+        TEST_ASSERT(empty && !empty->initializer);
         auto* store = dynamic_cast<skrumi::SetNode*>(program->stmts[3].get());
         TEST_ASSERT(store && store->op == "=" && dynamic_cast<skrumi::IndexNode*>(store->value.get()) &&
                     dynamic_cast<skrumi::IndexNode*>(store->target.get()));
@@ -114,9 +114,9 @@ int main() {
         TEST_ASSERT(compound && compound->op == "+");
     }
 
-    // 8. array as a parameter and result type; a parenthesized size is still a size
+    // 8. array as a parameter and result type; resize accepts a parenthesized expression
     {
-        auto program = parse("array twice(array items, int n) { return items; } array sized (2 + 1);");
+        auto program = parse("array twice(array items, int n) { return items; } array sized; resize(sized, (2 + 1));");
         auto* fn = dynamic_cast<skrumi::FuncDefNode*>(program->stmts[0].get());
         TEST_ASSERT(fn && fn->returnType == "array" && fn->params[0].type == "array");
         TEST_ASSERT(dynamic_cast<skrumi::ArrayDeclNode*>(program->stmts[1].get()));
@@ -145,7 +145,7 @@ int main() {
 
     // 11. global works for scalars and arrays
     {
-        auto program = parse("void f() { global int total = 0; global array seen 2; }");
+        auto program = parse("void f() { global int total = 0; global array seen; resize(seen, 2); }");
         auto* fn = dynamic_cast<skrumi::FuncDefNode*>(program->stmts[0].get());
         auto* body = dynamic_cast<skrumi::BlockNode*>(fn->body.get());
         auto* total = dynamic_cast<skrumi::VarDeclNode*>(body->stmts[0].get());

@@ -11,7 +11,7 @@
  },
  "array_size": {
   "exit": 1,
-  "stderr": "Skrumi: array_size.skm:1: Runtime Error: Array size cannot be negative\n",
+  "stderr": "Skrumi: array_size.skm:1: Runtime Error: argument 'size' of resize() cannot be negative: -1\n",
   "stdout": ""
  },
  "bad_key": {
@@ -40,9 +40,9 @@
   "stdout": ""
  },
  "builtin_overlap": {
-  "exit": 0,
-  "stderr": "",
-  "stdout": "2\nroute / home\n1\n"
+  "exit": 1,
+  "stderr": "Skrumi: builtin_overlap.skm:2: Type Error: parameter 'path' of 'get' has type 'string' and cannot hold a value of type 'array'\n",
+  "stdout": ""
  },
  "catch_rethrow": {
   "exit": 0,

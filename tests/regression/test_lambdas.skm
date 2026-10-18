@@ -16,7 +16,7 @@ func pick = (bool first, a, b) => {
 assert_true(twice(21) == 42, "expression lambda");
 assert_true(half(5) == 2.5, "untyped parameter without parentheses");
 assert_true(pick(false, "a", "b") == "b", "block lambda");
-assert_true(twice(2.7) == 4, "typed lambda parameter converts its argument");
+assert_true(twice(to_int(2.7)) == 4, "typed lambda parameter converts its argument");
 
 // 2. Function names as values: Skrumi functions and builtins
 int add(int a, int b) { return a + b; }

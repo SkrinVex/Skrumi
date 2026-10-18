@@ -36,7 +36,6 @@ enum class Op : std::uint8_t {
     Coerce,        // R[a] converted for a slot of type b (a Conversion)
     Assign,        // R[a] = R[b] for the variable named c, converted to its type
     Zero,          // R[a] = the zero value of type K[b]
-    NewSized,      // R[a] = an array of R[b] zeros, for `array name n;` (name c)
     Fail,          // raise the error text K[a]
     // Arithmetic and comparison: R[a] = R[b] op R[c]; y names the operator's text
     Add, Sub, Mul, Div, Mod, Eq, Ne, Lt, Le, Gt, Ge,

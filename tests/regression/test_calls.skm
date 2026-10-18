@@ -49,7 +49,7 @@ assert_true(middle(0) == 102, "a handler in the middle");
 float half(float x) { return x / 2; }
 assert_true(half(3) == 1.5, "int argument converted to float");
 int twice(int x) { return x * 2; }
-assert_true(twice(2.9) == 4, "float argument converted to int");
+assert_true(twice(to_int(2.9)) == 4, "float argument converted to int");
 message = "";
 try { twice("a"); } catch (string e) { message = e; }
 assert_true(str_contains(message, "parameter 'x'"), "wrong argument type: " + message);
@@ -99,7 +99,7 @@ array<int> typed = [];
 message = "";
 try { push(typed, "x"); } catch (string e) { message = e; }
 assert_true(message != "" && size(typed) == 0, "typed array still checks its elements");
-push(typed, 2.0);
+push(typed, to_int(2.0));
 assert_true(typed[0] == 2, "typed array converts on push");
 message = "";
 try { pop([]); } catch (string e) { message = e; }

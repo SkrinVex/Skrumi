@@ -851,10 +851,6 @@ private:
             if (node.initializer) {
                 into(*node.initializer, reg);
                 emit(Op::Coerce, reg, conversion(runtime::declaredKind(node.type), node.type, "initializer of array '" + node.name + "'"));
-            } else if (node.sizeNode) {
-                int size = any(*node.sizeNode);
-                emit(Op::NewSized, reg, size, stringConstant(node.name));
-                if (!plain) emit(Op::Coerce, reg, conversion(runtime::declaredKind(node.type), node.type, "array '" + node.name + "'"));
             } else if (plain) {
                 emit(Op::NewArray, reg, 0, 0);
             } else {
@@ -1377,7 +1373,6 @@ void disassemble(const Proto& proto, std::ostream& out) {
             case Op::Coerce: out << reg(in.a) << " " << proto.conversions[in.b].type; break;
             case Op::Assign: out << reg(in.a) << " " << reg(in.b) << " (" << K[in.c].str() << ")"; break;
             case Op::Zero: out << reg(in.a) << " " << K[in.b].str(); break;
-            case Op::NewSized: out << reg(in.a) << " " << reg(in.b); break;
             case Op::Fail: out << show(K[in.a]); break;
             case Op::Add: case Op::Sub: case Op::Mul: case Op::Div: case Op::Mod:
             case Op::AddInt: case Op::SubInt: case Op::MulInt: case Op::DivInt: case Op::ModInt:

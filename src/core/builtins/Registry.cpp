@@ -46,7 +46,7 @@ struct Registry {
             for (const auto& param : spec.params) {
                 Builtin::Accepts accepts;
                 if (param.type == "any") accepts.rule = Builtin::Accepts::Rule::Any;
-                else if (param.type == "int" || param.type == "float" || param.type == "number")
+                else if (param.type == "float" || param.type == "number")
                     accepts.rule = Builtin::Accepts::Rule::Number;
                 else if ((accepts.kind = declaredKind(param.type)) != Value::Kind::Struct)
                     accepts.rule = Builtin::Accepts::Rule::Kind;
@@ -120,14 +120,6 @@ const Builtin* findBuiltin(const std::string& name) {
 }
 
 const BuiltinSpec& specOf(const Builtin& builtin) { return builtin.spec; }
-
-bool acceptsArguments(const Builtin& builtin, Arguments args) {
-    const auto& spec = builtin.spec;
-    if (!spec.acceptsCount(args.size())) return false;
-    for (size_t i = 0; i < args.size(); ++i)
-        if (!typeFits(builtin, i, args[i])) return false;
-    return true;
-}
 
 Value invoke(const Builtin& builtin, Arguments args, Context& ctx) {
     const auto& spec = builtin.spec;

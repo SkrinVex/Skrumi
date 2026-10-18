@@ -68,7 +68,7 @@ int main() {
     // 6. Array bounds cleanly caught
     {
         const char* code = R"(
-            array a 3;
+            array a; resize(a, 3);
             set(a, 10, 999);
         )";
         auto res = interpreter.runSource(code);
@@ -257,14 +257,14 @@ int main() {
         step("array lifetime");
         skrumi::Interpreter interp;
         auto res = interp.runSource(R"(
-            void churn() { array tmp 16; set(tmp, 0, 1); }
-            void loop() { int i = 0; while (i < 500) { array local 16; churn(); i++; } }
+            void churn() { array tmp; resize(tmp, 16); set(tmp, 0, 1); }
+            void loop() { int i = 0; while (i < 500) { array local; resize(local, 16); churn(); i++; } }
             loop();
         )");
         TEST_ASSERT(res.success);
 
         // Only the variable holds the array: nothing else keeps a copy alive.
-        auto kept = interp.runSource("array survivor 4; set(survivor, 0, 5);");
+        auto kept = interp.runSource("array survivor; resize(survivor, 4); set(survivor, 0, 5);");
         TEST_ASSERT(kept.success);
         TEST_ASSERT(interp.getContext().variables.at("survivor").ref()->refs == 1);
     }
@@ -384,13 +384,13 @@ int main() {
         TEST_ASSERT(!missing.success && missing.errorMessage.find("ended without a value") != std::string::npos);
     }
 
-    // 26. A builtin and a Skrumi function may share a name; the arguments decide
+    // 26. A builtin and a Skrumi function may share a name; the Skrumi declaration shadows by name
     {
-        step("builtin overloads");
+        step("builtin shadowing");
         skrumi::Interpreter interp;
         auto res = interp.runSource(
             "string routed = \"\"; void get(string path, string handler) { routed = path + \"->\" + handler; }"
-            "array items = [10, 20]; int second = get(items, 1); get(\"/health\", \"health\");");
+            "array items = [10, 20]; int second = items[1]; get(\"/health\", \"health\");");
         TEST_ASSERT(res.success);
         TEST_ASSERT(interp.getGlobal("second").text() == "20");
         TEST_ASSERT(interp.getGlobal("routed").text() == "/health->health");
