@@ -26,7 +26,12 @@ with tempfile.TemporaryDirectory(prefix='skrumi-gui-') as temporary:
     target.mkdir()
     preexisting = target/'existing-project.skm'
     preexisting.write_bytes(b'// project created before installation')
-    process = subprocess.Popen([str(app)], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    fake_bin = root/'editor-bin'; fake_bin.mkdir()
+    fake_code = fake_bin/('code.cmd' if os.name == 'nt' else 'code')
+    fake_code.write_text('discovery fixture; must never be executed'); fake_code.chmod(0o755)
+    gui_env = dict(os.environ, PATH=str(fake_bin)+os.pathsep+os.environ.get('PATH', ''))
+    gui_env.pop('VSCODE_PORTABLE', None); gui_env.pop('VSCODE_EXTENSIONS', None)
+    process = subprocess.Popen([str(app)], cwd=root, env=gui_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     window = NativeWindow('Skrumi '+version)
     def wait_until(predicate, seconds=15):
         deadline = time.monotonic()+seconds
@@ -100,6 +105,13 @@ with tempfile.TemporaryDirectory(prefix='skrumi-gui-') as temporary:
         click(180,394)
         wait_until(lambda: window.pixel(630,540) == 0xef7b35)
         screenshot('editor-selection')
+        unchecked = window.pixel(54,242)
+        click(54,242)
+        window.mouse(400,510)
+        wait_until(lambda: window.pixel(54,242) != unchecked)
+        click(54,242)  # deselect: no host editor files are touched
+        window.mouse(400,510)
+        wait_until(lambda: window.pixel(54,242) == unchecked)
         click(140,550)  # rescan; never selects an integration implicitly
         click(700,550)  # return to installation options
         time.sleep(.15)
@@ -152,7 +164,7 @@ with tempfile.TemporaryDirectory(prefix='skrumi-gui-') as temporary:
         assert process.returncode == 0, (output,errors)
         baseline = {p.relative_to(target): p.read_bytes() for p in target.rglob('*') if p.is_file()}
         window.dispose()
-        process = subprocess.Popen([str(app)], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen([str(app)], cwd=root, env=gui_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         window = NativeWindow('Skrumi '+version)
         wait_until(window.find); time.sleep(.3)
         wait_until(lambda: window.pixel(60,290) == 0xef7b35)
@@ -187,7 +199,7 @@ with tempfile.TemporaryDirectory(prefix='skrumi-gui-') as temporary:
         # Removal is a separate page; neither entering it nor rejecting its
         # confirmation may mutate the installation or create a transaction.
         window.dispose()
-        process = subprocess.Popen([str(app)], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen([str(app)], cwd=root, env=gui_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         window = NativeWindow('Skrumi '+version)
         wait_until(window.find); time.sleep(.3)
         wait_until(lambda: window.pixel(60,290) == 0xef7b35)

@@ -60,6 +60,7 @@ void editor_apply(array plans, bool reverse) {
 }
 // Do not execute discovered programs while rendering the options screen.
 string editor_find(string name) {
+    if (name == "code" && (env_get("VSCODE_PORTABLE") != "" || env_get("VSCODE_EXTENSIONS") != "")) { return ""; }
     array candidates;
     string separator = ":"; string suffix = "";
     if (os_platform() == "windows") { separator = ";"; suffix = ".exe"; }
@@ -82,7 +83,15 @@ string editor_find(string name) {
         for (int i = 0; i < 3; i++) { push(candidates, path_join(["/usr/bin", "/usr/local/bin", path_join(os_user_dir("home"), ".local/bin")][i], name)); }
         if (name == "code") { push(candidates, "/usr/share/code/bin/code"); }
     }
-    for (int i = 0; i < size(candidates); i++) { if (fs_is_file(candidates[i]) && fs_is_executable(candidates[i])) { return candidates[i]; } }
+    for (int i = 0; i < size(candidates); i++) {
+        string candidate = candidates[i];
+        if (name == "code") {
+            string base = path_parent(candidate);
+            if (str_lower(path_name(base)) == "bin") { base = path_parent(base); }
+            if (fs_is_dir(path_join(base, "data"))) { continue; } // VS Code portable mode
+        }
+        if (fs_is_file(candidate) && fs_is_executable(candidate)) { return candidate; }
+    }
     return "";
 }
 bool editor_wanted(string name) {

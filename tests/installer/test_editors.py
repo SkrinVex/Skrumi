@@ -79,6 +79,14 @@ try {{
     assert 'skrumi' not in json.loads(lsp.read_text())['servers']
     run(driver, 'none', target); restored()
     run(driver, 'crash', target); installed()
+    journal = Path(str(target)+'.skrumi-transaction')/'journal.json'
+    valid_journal = journal.read_bytes()
+    tampered = json.loads(valid_journal)
+    tampered[8][0][0] = 'vscode/skrinvex.skrumi-language-x/../../outside.txt'
+    journal.write_text(json.dumps(tampered))
+    run(driver, 'recover', target, ok=False)
+    installed()  # rejecting an invalid destination changes no editor files
+    journal.write_bytes(valid_journal)
     run(driver, 'recover', target); restored()
     run(driver, 'install', target); installed()
     run(driver, 'install', target); installed()  # idempotent update
@@ -110,6 +118,8 @@ try {{
     detect.write_text(f'''include({q(repo/'installer/transaction.skm')});
 if (!env_set("PATH", {q(fake)})) {{ fail("env_set"); }}
 if (editor_find("code") != {q(candidate)}) {{ fail("PATH detection"); }}
+if (!env_set("VSCODE_PORTABLE", "portable")) {{ fail("env_set"); }}
+if (editor_find("code") != "") {{ fail("portable profile must not be configured as native"); }}
 print("DETECTION_OK");
 ''')
     run(binary, detect)

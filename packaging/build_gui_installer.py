@@ -46,12 +46,15 @@ def prepare_editors(resources, version):
     editor_resources = resources/'editors'; editor_resources.mkdir()
     editor_records = []
     vscode = editor_resources/'vscode'; vscode.mkdir()
-    for source in sorted((ROOT/'editors/vscode').rglob('*')):
-        if source.is_file():
-            relative = source.relative_to(ROOT/'editors/vscode')
-            destination = vscode/relative; destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
-            editor_records.append([f'vscode/skrinvex.skrumi-language-{version}/{relative.as_posix()}', f'vscode/{relative.as_posix()}'])
+    # Explicit runtime files: never embed local build caches, tests or credentials.
+    vscode_files = ['package.json', 'language-configuration.json', 'README.md',
+                    'syntaxes/skrumi.tmLanguage.json', 'client/extension.js',
+                    'client/run.js', 'client/debug.js', 'LICENSE']
+    for name in vscode_files:
+        source = ROOT/'LICENSE' if name == 'LICENSE' else ROOT/'editors/vscode'/name
+        destination = vscode/name; destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+        editor_records.append([f'vscode/skrinvex.skrumi-language-{version}/{name}', f'vscode/{name}'])
     (vscode/'installation.json').write_text('[]', encoding='utf-8')
     editor_records.append([f'vscode/skrinvex.skrumi-language-{version}/installation.json', 'vscode/installation.json'])
     kate = editor_resources/'kate'; kate.mkdir()
