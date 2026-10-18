@@ -358,7 +358,7 @@ bool tx_step() {
         tx_journal_phase("committed"); tx_phase = "committed";
         try { tx_cleanup(); tx_note(setup_tr("Completed successfully")); }
         catch (string error) {
-            tx_warning = setup_tr("Installation committed and verified. Cleanup remains pending: ") + error;
+            tx_warning += setup_tr("Installation committed and verified. Cleanup remains pending: ") + error;
             tx_note(tx_warning);
         }
         tx_release(); return true;

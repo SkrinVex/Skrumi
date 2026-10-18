@@ -36,6 +36,7 @@ if (size(setup_args) == 2 && setup_args[0] == "--uninstall-gui") {
             while (!location_step()) { wait(1); }
         }
         print(tx_message);
+        if (tx_warning != "") { print(tx_warning); }
     } catch (string error) {
         print(error);
         try { location_cancel(); } catch (string recovery_error) { print(setup_tr("Recovery required: ") + recovery_error); }
@@ -300,7 +301,7 @@ while (window_poll()) {
         string error_answer = ui_dialog("error", setup_tr("Setup error"), setup_tr("The operation could not be completed. Details: ") + setup_error, "error");
         if (error_answer != "pending") { setup_error_dialog = false; setup_screen = setup_options_screen(); }
     }
-    if (tx_warning != "" && !setup_confirm && setup_error == "") {
+    if (tx_warning != "" && !setup_running && tx_phase == "committed" && !setup_confirm && setup_error == "") {
         string warning_answer = ui_dialog("cleanup-warning", setup_tr("Installation completed"), tx_warning, "info");
         if (warning_answer != "pending") { tx_warning = ""; }
     }

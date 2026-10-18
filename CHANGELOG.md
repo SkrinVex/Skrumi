@@ -10,6 +10,8 @@
 - Extend transaction journals to v4 for editor snapshots: install, update,
   deselection, cancellation, process interruption, recovery and uninstall.
   Preserve edited/unmanaged files and unrelated Kate configuration changes;
+  pre-existing manual integrations are skipped with a warning, without blocking
+  runtime installation or claiming ownership of those files;
   continue reading older journals/manifests. No installer visual redesign.
 - Add standalone regression coverage for integration ownership and recovery,
   and update component versions consistently. No language or VM changes.

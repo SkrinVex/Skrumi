@@ -25,7 +25,14 @@ array editor_snapshot(string id) {
         string mode = "rw-r--r--"; if (os_platform() == "windows") { mode = "rw-rw-rw-"; }
         return [false, "", mode];
     }
-    return [true, read_checked(path), fs_permissions(path)];
+    string mode = fs_permissions(path);
+    // Windows filesystem libraries disagree about execute bits; only the
+    // read-only attribute is meaningful/settable here. Do not compare fake POSIX bits.
+    if (os_platform() == "windows") {
+        if (str_substring(mode, 1, 1) == "w") { mode = "rw-rw-rw-"; }
+        else { mode = "r--r--r--"; }
+    }
+    return [true, read_checked(path), mode];
 }
 void editor_validate(array plans) {
     array ids;
@@ -53,6 +60,7 @@ void editor_apply(array plans, bool reverse) {
                     make_dirs_checked(path_parent(path)); fs_write_atomic(path, after[1]);
                     if (!fs_set_permissions(path, after[2])) { fail("Cannot set editor file permissions"); }
                 } else { fs_remove_checked(path); }
+                if (json_value(editor_snapshot(record[0])) != json_value(after)) { fail("Editor file verification failed: " + path); }
             }
         } catch (string error) { if (!reverse) { fail(error); } errors += error + "\n"; }
     }
@@ -104,7 +112,10 @@ string editor_json(string id, string content, string root) {
     if (content != "") { document = json_decode(content); }
     string key = "servers"; if (id == "kate/dap") { key = "dap"; }
     map section = get_or(document, key, {});
-    if (has(section, "skrumi")) { fail(setup_tr("Existing Skrumi editor settings preserved: ") + editor_destination(id)); }
+    if (has(section, "skrumi")) {
+        tx_warning += setup_tr("Existing Skrumi editor settings preserved: ") + editor_destination(id) + "\n";
+        return "";
+    }
     string suffix = ""; if (os_platform() == "windows") { suffix = ".exe"; }
     map supplied = json_decode(resource_read("editors/" + id + ".json"));
     map entry = supplied[key]["skrumi"];
@@ -155,9 +166,11 @@ void editor_plan(array previous, string root, bool uninstall, bool lsp) {
             if (editor_changes[j][0] == id) { original = editor_changes[j][2]; replaced = j; }
         }
         string content = resource_read("editors/" + item[1]);
-        if (id == "kate/lsp" || id == "kate/dap") { content = editor_json(id, original[1], root); }
+        if (id == "kate/lsp" || id == "kate/dap") {
+            content = editor_json(id, original[1], root);
+            if (content == "") { continue; } // Unmanaged profile: no write and no ownership claim.
+        }
         else {
-            if (original[0]) { fail(setup_tr("Existing editor file preserved: ") + editor_destination(id)); }
             if (str_ends_with(id, "/installation.json")) { content = json_value([root]); }
             if (kind == "kate" && id != "kate/syntax") {
                 string executable = path_join(root, "skrumi"); if (os_platform() == "windows") { executable += ".exe"; }
@@ -165,6 +178,10 @@ void editor_plan(array previous, string root, bool uninstall, bool lsp) {
                 executable = str_replace(str_replace(executable, "\\", "\\\\"), "\n", "\\n");
                 content = str_replace(content, "executable=skrumi", "executable=" + executable);
             }
+        }
+        if (original[0] && id != "kate/lsp" && id != "kate/dap") {
+            if (original[1] != content) { tx_warning += setup_tr("Existing editor file preserved: ") + editor_destination(id) + "\n"; }
+            continue; // Identical manual installations are a no-op; different files are preserved.
         }
         array after = [true, content, original[2]];
         array change = [id, before, after];

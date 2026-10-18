@@ -45,6 +45,7 @@ try {{
         if (args[0] == "crash") {{ tx_release(); exit(0); }}
         if (args[0] == "cancel") {{ tx_cancel(); }}
         else {{ while (!tx_step()) {{ wait(1); }} }}
+        if (tx_warning != "") {{ print(tx_warning); }}
     }}
 }} catch (string error) {{
     print(error); try {{ tx_cancel(); }} catch (string e) {{ print(e); }} tx_release(); exit(1);
@@ -109,8 +110,32 @@ try {{
     syntax.unlink()
     settings = json.loads(lsp.read_text()); settings['servers']['skrumi'] = {'command':['my-lsp']}
     lsp.write_text(json.dumps(settings)); before = lsp.read_bytes()
-    run(driver, 'install', target, ok=False)
-    assert lsp.read_bytes() == before and not (extension/'package.json').exists()
+    warning = run(driver, 'install', target)
+    assert 'Existing Skrumi editor settings preserved' in warning.stdout
+    assert lsp.read_bytes() == before and (extension/'package.json').exists()
+    run(driver, 'uninstall', target)
+    assert lsp.read_bytes() == before
+    # Manual, identical files can coexist without being adopted or removed.
+    extension.mkdir(parents=True, exist_ok=True)
+    manual_package = extension/'package.json'
+    manual_package.write_bytes((repo/'editors/vscode/package.json').read_bytes())
+    run(driver, 'install', target)
+    run(driver, 'uninstall', target)
+    assert manual_package.read_bytes() == (repo/'editors/vscode/package.json').read_bytes()
+    # Different manual files are preserved with a visible warning, not a runtime rollback.
+    manual_package.write_text('{"manual":true}')
+    warning = run(driver, 'install', target)
+    assert 'Existing editor file preserved' in warning.stdout
+    run(driver, 'uninstall', target)
+    assert manual_package.read_text() == '{"manual":true}'
+    # Snapshot permissions represent only the Windows read-only bit; POSIX keeps all bits.
+    permissions = base/'permissions.skm'
+    permissions.write_text(f'''include({q(repo/'installer/transaction.skm')});
+string os_user_dir(string kind) {{ return {q(user)}; }}
+array snapshot = editor_snapshot("kate/lsp");
+if (os_platform() == "windows" && snapshot[2] != "rw-rw-rw-") {{ fail("noncanonical Windows permissions"); }}
+''')
+    run(binary, permissions)
     # Detection uses executable candidates rather than stale settings directories.
     detect = base/'detect.skm'; fake = base/'bin'; fake.mkdir()
     candidate = fake/('code.cmd' if os.name == 'nt' else 'code')
