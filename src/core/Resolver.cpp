@@ -131,7 +131,6 @@ void Resolver::visit(Node* node) {
             }
         }
     } else if (auto* n = dynamic_cast<ArrayDeclNode*>(node)) {
-        visit(n->sizeNode.get());
         visit(n->initializer.get());
         if (!n->global && !topLevel()) {
             n->programGlobal = atProgramLevel();

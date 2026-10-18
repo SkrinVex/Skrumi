@@ -38,8 +38,8 @@ CASES = {
     "global_keyword": "void f() { global int shared = 7; }\nf();\nprint(shared);\nf();\nprint(shared);\n",
     "block_scope": "int i = 0;\nwhile (i < 1) { int inner = 5; i++; }\nprint(inner);\n",
     "shadowing": "int x = 1;\nvoid f() { int x = 2; if (true) { int x = 3; print(x); } print(x); }\nf();\nprint(x);\n",
-    "declared_types": "float f = 3;\nint n = 3.9;\nstring s = 5;\nprint(f, n, s);\nf = 2;\nprint(f);\nbool b = 1;\n",
-    "param_types": "float half(int v) { return v / 2; }\nprint(half(5), half(5.9));\nvoid g(int x) {}\ng(\"abc\");\n",
+    "declared_types": "float f = 3;\nint n = to_int(3.9);\nstring s = 5;\nprint(f, n, s);\nf = 2;\nprint(f);\nbool b = 1;\n",
+    "param_types": "float half(int v) { return v / 2; }\nprint(half(5), half(to_int(5.9)));\nvoid g(int x) {}\ng(\"abc\");\n",
     "return_types": "int f() { }\nint y = f();\n",
     "void_return": "void f() { return; }\nf();\nprint(\"ok\");\nint g() { return \"x\"; }\nprint(g());\n",
     "arguments": "void f(int x) {}\nf(1, 2);\n",
@@ -91,14 +91,14 @@ CASES = {
         "struct P { int x; float y = 1.5; string name = \"p\"; }\nP p = P(1);\np.x = 2;\np.y = 3;\nprint(p, p.y);\n"
         "array ps = [P(1), P(2)];\nps[1].x += 40;\nprint(ps[1].x);\nmap nested = {};\nnested[\"k\"] = {\"inner\": [1]};\n"
         "nested[\"k\"][\"inner\"][0] = 5;\nprint(nested);\narray b = a;\npush(b, 4);\nprint(a);\narray c = copy(a);\npush(c, 5);\nprint(a, c);\n"
-        "map keys = {1: \"one\", \"2\": \"two\"};\nprint(keys[1], keys[\"1\"], keys[2]);\narray sized 3;\nprint(sized);\narray empty;\nprint(empty);\n"
+        "map keys = {1: \"one\", \"2\": \"two\"};\nprint(keys[1], keys[\"1\"], keys[2]);\narray sized; resize(sized, 3);\nprint(sized);\narray empty;\nprint(empty);\n"
     ),
     "index_errors": "array a = [1];\nprint(a[5]);\n",
     "map_missing": "map m = {};\nprint(m.nothing);\n",
     "field_type": "struct P { int x; }\nP p = P(1);\np.x = \"text\";\n",
     "bad_key": "map m = {};\nm[1.5] = 2;\n",
     "bad_literal_key": "map m = {[1]: 2};\n",
-    "array_size": "array a -1;\n",
+    "array_size": "array a; resize(a, -1);\n",
     "struct_errors": "struct P { int x; }\nP p = P(1, 2);\n",
     "container_ops": "print([1] + 1);\n",
     "struct_cycle": "array loop = [1];\npush(loop, loop);\nprint(loop, loop == loop, size(copy(loop)[1]));\n",
@@ -133,7 +133,7 @@ CASES = {
     "error_in_finally_after_return": "int f() {\n  try {\n    return 1;\n  } finally {\n    fail(\"in finally\");\n  }\n}\ntry { print(f()); } catch (e) { print(\"caught\", e); }\n",
     "catch_rethrow": "try {\n  try {\n    fail(\"x\");\n  } catch (e) {\n    throw \"again: \" + e;\n  }\n} catch (e) {\n  print(e);\n}\n",
     "compound_assign": "int a = 5;\na += 2;\na -= 1;\na *= 3;\na /= 2;\na %= 5;\nprint(a);\nstring s = \"x\";\ns += 1;\nprint(s);\nint big = 2147483647;\nbig += 1;\n",
-    "compound_types": "int a = 5;\na += 1.5;\nprint(a);\nfloat f = 1;\nf /= 4;\nprint(f);\nint b = 7;\nb /= 0;\n",
+    "compound_types": "int a = 5;\na += to_int(1.5);\nprint(a);\nfloat f = 1;\nf /= 4;\nprint(f);\nint b = 7;\nb /= 0;\n",
     "deep_recursion": "int down(int n) { return down(n + 1); }\ndown(0);\n",
     "recursion_caught": "int down(int n) { return down(n + 1); }\ntry { down(0); } catch (e) { print(\"stopped\"); }\nprint(\"alive\");\n",
     "strings_in_loops": "string s = \"\";\nfor (int i = 0; i < 5; i++) { s = s + i + \",\"; }\nprint(s);\narray parts = split(s, \",\");\nprint(size(parts), join(parts, \"-\"));\n",

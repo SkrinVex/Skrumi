@@ -43,7 +43,7 @@ assert_true(call_with_shadow() == 7, "function ignores caller local of the same 
 int total = 0;
 int turn = 0;
 while (turn < 50) {
-    array scratch 4;
+    array scratch; resize(scratch, 4);
     set(scratch, 0, turn);
     total += get(scratch, 0);
     turn++;
@@ -55,7 +55,7 @@ int first_of(array values) {
     return get(values, 0);
 }
 
-array shared_array 3;
+array shared_array; resize(shared_array, 3);
 set(shared_array, 0, 42);
 assert_true(first_of(shared_array) == 42, "array argument resolves in the callee");
 

@@ -239,7 +239,7 @@ while (window_poll()) {
         if (tx_phase == "committed") { progress = size(tx_entries) * 2 + 1; }
         ui_progress_bar(setup_x(48), setup_y(198), setup_px(704), setup_px(26), progress, 0, max(1, size(tx_entries) * 2 + 1), true);
         setup_text(48, 242, tx_message, 14, UI_TEXT);
-        setup_scroll = ui_scroll_begin("log", setup_x(48), setup_y(274), setup_px(704), setup_px(166), setup_px(setup_scroll), setup_px(size(tx_log) * 18)) / setup_scale;
+        setup_scroll = to_int(ui_scroll_begin("log", setup_x(48), setup_y(274), setup_px(704), setup_px(166), setup_px(setup_scroll), setup_px(size(tx_log) * 18)) / setup_scale);
         for (int i = 0; i < size(tx_log); i++) { setup_text(52, 278 + i * 18 - setup_scroll, tx_log[i], 14, UI_MUTED); }
         ui_scroll_end();
         setup_text(48, 462, setup_target, 14, UI_MUTED);

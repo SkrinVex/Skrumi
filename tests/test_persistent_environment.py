@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -73,5 +74,41 @@ with tempfile.TemporaryDirectory(prefix='skrumi environment ') as temp:
         unrelated.write_text('preserve', encoding='utf-8')
         run(f'user_path_apply(["file", {q(unrelated)}, [true, "preserve", "644"], [true, "destroy", "644"]], false);', False)
         assert unrelated.read_text() == 'preserve'
+        # Fish has a native configuration fragment, not a POSIX profile block.
+        env['SHELL'] = '/usr/bin/fish'
+        env['XDG_CONFIG_HOME'] = str(root/'custom config')
+        fragment = root/'custom config/fish/conf.d/skrumi-path.fish'
+        fish_target = root/"fish '\\\\ path $(touch INJECTED) [x]"
+        fish_target.mkdir()
+        fish_code = f'array p = user_path_plan({q(fish_target)}, true);'
+        run(fish_code + 'fs_write_atomic("fish-plan.json", json_value(p)); user_path_apply(p, false); user_path_apply(p, false);')
+        installed_fish = fragment.read_text()
+        assert installed_fish.count('# Skrumi PATH ') == 2
+        assert profile.read_text() == original+'# later user edit\n'
+        fish = shutil.which('fish')
+        if fish:
+            # Load the fragment twice to verify quoting, duplicate suppression and
+            # no command substitution, using an actual Fish process.
+            script = r'source "$argv[1]"; source "$argv[1]"; printf "%s\n" $PATH'
+            result = subprocess.run([fish, '--no-config', '-c', script, str(fragment)],
+                                    env=env, cwd=root, capture_output=True, text=True, timeout=15)
+            assert result.returncode == 0, result.stderr
+            assert result.stdout.splitlines().count(str(fish_target)) == 1, result.stdout
+            startup = subprocess.run([fish, '-c', r'printf "%s\\n" $PATH'],
+                                     env=env, cwd=root, capture_output=True, text=True, timeout=15)
+            assert startup.returncode == 0 and startup.stdout.splitlines().count(str(fish_target)) == 1, startup
+            assert not (root/'INJECTED').exists()
+        else:
+            print('Fish executable unavailable: native shell execution skipped')
+        run('array p = json_decode(read_file("fish-plan.json")); user_path_apply(p, true);')
+        assert not fragment.exists()
+        fragment.write_text('# existing user config\n')
+        run(fish_code + 'fs_write_atomic("fish-plan.json", json_value(p)); user_path_apply(p, false);')
+        fragment.write_text(fragment.read_text()+'# later edit\n')
+        run('array p = json_decode(read_file("fish-plan.json")); user_path_apply(p, true);', False)
+        # Removal uses the installed backend even after changing login shell.
+        env['SHELL'] = '/bin/sh'
+        run(f'array p = json_decode(read_file("fish-plan.json")); user_path_apply(user_path_removal(p, {q(fish_target)}), false);')
+        assert fragment.read_text() == '# existing user config\n# later edit\n'
         run('env_user_snapshot("Path");', False)
 print('PERSISTENT_ENVIRONMENT_OK')

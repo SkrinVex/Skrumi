@@ -1,3 +1,41 @@
+# Migration to explicit language contracts
+
+The current release removes three language behaviors from the previous major.
+The VERSION file is the authoritative version number.
+
+- Replace implicit float-to-int conversion with to_int(value), including typed
+  arrays/maps, fields, function arguments/results, builtin int arguments and
+  array indices. This truncates toward zero; use a rounding function first when
+  that is the intended behavior. Int-to-float widening remains implicit.
+- Replace a sized array declaration with an empty declaration and
+  resize(name, count). Existing literals and array parameters are unchanged.
+- A Skrumi function now shadows a builtin by name for every argument list.
+  There is no runtime fallback based on argument types. After importing server,
+  get refers to its route function; use items[index] for array access.
+  Use a module alias such as using server as http and http.get for explicit
+  module calls. Imports still export global names; aliases do not introduce
+  isolated module namespaces.
+- Fish PATH integration now writes a native conf.d fragment and supports
+  transactional rollback. Existing POSIX/zsh plans can still be removed using
+  their recorded destination even if the login shell has changed.
+
+For a module-level array initialized during import, keep allocation inside the
+initializer: imports execute declarations but skip standalone top-level calls.
+A small ordinary function supplies that initializer without special syntax:
+
+```cpp
+array make_zeros(int count) {
+    array result;
+    resize(result, count);
+    return result;
+}
+array zeros = make_zeros(3);
+```
+
+Known narrowing is diagnosed by check/LSP. Untyped parameters, dynamic function
+values and container contents still require runtime checks; check is not a proof
+that a program cannot fail.
+
 # Переход на самостоятельный Skrumi
 
 ## History

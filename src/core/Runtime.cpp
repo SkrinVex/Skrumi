@@ -349,8 +349,7 @@ void coerce(const std::string& type, Value& value, const std::string& what) {
         case Value::Kind::Float:
             if (type == "float") return;
             if (type == "int") {
-                value = intValue(value, what);
-                return;
+                throw std::runtime_error("Type Error: " + what + " cannot implicitly convert float to int; use to_int()");
             }
             break;
         case Value::Kind::String:

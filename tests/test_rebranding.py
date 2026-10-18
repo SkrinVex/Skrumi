@@ -14,7 +14,7 @@ with tempfile.TemporaryDirectory(prefix='skrumi-policy-') as tmp:
         p = subprocess.run([str(binary), *map(str, args)], cwd=root, env=env, capture_output=True, text=True, timeout=30)
         assert (p.returncode == 0) == ok, (args, p.stdout, p.stderr)
         return p
-    assert run('--version').stdout.startswith('Skrumi 9.')
+    assert run('--version').stdout.strip() == 'Skrumi ' + (Path(__file__).resolve().parents[1] / 'VERSION').read_text().strip()
     (root / 'main.skm').write_text('print(7);')
     (root / 'old.fox').write_text('print(9);')
     assert run('main.skm').stdout.strip() == '7'

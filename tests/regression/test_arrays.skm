@@ -10,7 +10,7 @@ void assert_true(bool cond, string msg) {
 }
 
 // 1. Declaration by size, by literal, empty
-array nums 5;
+array nums; resize(nums, 5);
 assert_true(size(nums) == 5 && nums[4] == 0, "sized array is zero-filled");
 array primes = [2, 3, 5, 7];
 assert_true(size(primes) == 4 && primes[3] == 7, "array literal");

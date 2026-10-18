@@ -46,8 +46,8 @@ run_expect_fail "non_existent_func(1, 2);" "Function 'non_existent_func' not fou
 run_expect_fail "int z = 10 / 0;" "Division by zero" "integer division by zero"
 
 # 6. Array bounds
-run_expect_fail "array arr 2; set(arr, 5, 10);" "Array index out of bounds" "array set out of bounds"
-run_expect_fail "array arr 2; int x = get(arr, -1);" "Array index out of bounds" "array get negative index"
+run_expect_fail "array arr; resize(arr, 2); set(arr, 5, 10);" "Array index out of bounds" "array set out of bounds"
+run_expect_fail "array arr; resize(arr, 2); int x = get(arr, -1);" "Array index out of bounds" "array get negative index"
 
 # 7. Type mismatch assignment
 run_expect_fail "int a = 5; a = \"text\";" "Type Error" "assigning string to int variable"

@@ -72,12 +72,14 @@ inline long long intArg(const Value& value, const char* what) {
     if (value.isInt() && value.asInt() >= -2147483648LL && value.asInt() <= 2147483647LL) return value.asInt();
     long long result = 0;
     if (runtime::tryInt(value, result)) return result;
+    if (value.isFloat()) throw std::runtime_error("Type Error: " + std::string(what) + " requires int; use to_int()");
     return runtime::toInt(value, what);
 }
 
 inline long long intArg(const Value& value, const char* role, const std::string& name) {
     long long result = 0;
     if (runtime::tryInt(value, result)) return result;
+    if (value.isFloat()) throw std::runtime_error("Type Error: " + std::string(role) + " requires int; use to_int()");
     return runtime::toInt(value, role + std::string(" '") + name + "'");
 }
 
@@ -279,11 +281,10 @@ struct PostIncNode : Node {
     explicit PostIncNode(std::string n, int d = 1) : name(std::move(n)), delta(d) {}
 };
 
-// array name size;   array name = expression;   array name;
+// array name = expression;   array name;
 struct ArrayDeclNode : Node {
     std::string name;
     std::string type = "array"; // array, array?, array<int>
-    std::unique_ptr<Node> sizeNode;
     std::unique_ptr<Node> initializer;
     SourceRange nameRange;
     bool global = false;
@@ -291,8 +292,8 @@ struct ArrayDeclNode : Node {
     bool programGlobal = false;
     int slot = VarRef::byName;
     bool duplicate = false;
-    ArrayDeclNode(std::string n, std::unique_ptr<Node> s, std::unique_ptr<Node> init = nullptr, SourceRange nr = {})
-        : name(std::move(n)), sizeNode(std::move(s)), initializer(std::move(init)), nameRange(nr) {}
+    ArrayDeclNode(std::string n, std::unique_ptr<Node> init = nullptr, SourceRange nr = {})
+        : name(std::move(n)), initializer(std::move(init)), nameRange(nr) {}
 };
 
 // [a, b, c] creates a temporary array owned by the scope that evaluates it.

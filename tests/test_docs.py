@@ -23,6 +23,7 @@ spec.loader.exec_module(catalog)
 documents = [root / "README.md", root / "DOCUMENTATION.md", *sorted((root / "docs").glob("*.md"))]
 failures = []
 checked = 0
+executed = 0
 with tempfile.TemporaryDirectory(prefix="skrumi-docs-test-") as directory:
     env = dict(os.environ, SKRUMI_HOME=str(Path(directory) / "absent"))
     for document in documents:
@@ -37,6 +38,12 @@ with tempfile.TemporaryDirectory(prefix="skrumi-docs-test-") as directory:
             result = subprocess.run([str(binary), "check", str(source)], cwd=directory, env=env,
                                     capture_output=True, encoding="utf-8", timeout=30)
             checked += 1
+            if text[:match.start()].rstrip().endswith("<!-- skrumi-run -->") and result.returncode == 0:
+                actual = subprocess.run([str(binary), str(source)], cwd=directory, env=env,
+                                        capture_output=True, encoding="utf-8", timeout=30)
+                executed += 1
+                if actual.returncode != 0:
+                    failures.append(f"{document.relative_to(root)}:{line} runtime contract failed\n{actual.stdout}{actual.stderr}")
             if result.returncode != 0 or "no problems found" not in result.stdout:
                 failures.append(f"{document.relative_to(root)}:{line}\n{code}\n{result.stdout}{result.stderr}")
 
@@ -54,4 +61,4 @@ if missing:
 if failures:
     print("\n\n".join(failures))
     sys.exit(1)
-print(f"DOCS_OK: {checked} code blocks checked, {len(names)} functions documented")
+print(f"DOCS_OK: {checked} code blocks checked, {executed} contracts executed, {len(names)} functions documented")

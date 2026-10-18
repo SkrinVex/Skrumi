@@ -337,6 +337,7 @@ void SemanticAnalyzer::visitNode(const Node* node) {
     } else if (auto* set = dynamic_cast<const SetNode*>(node)) {
         visitNode(set->value.get());
         visitNode(set->target.get());
+        checkNarrowing(expressionType(set->target.get()), set->value.get());
     } else if (auto* map = dynamic_cast<const MapLiteralNode*>(node)) {
         for (const auto& entry : map->entries) {
             visitNode(entry.first.get());
@@ -517,7 +518,7 @@ void SemanticAnalyzer::visitStructDef(const StructDefNode* node) {
     for (size_t i = 0; i < node->type->fields.size(); ++i) {
         SourceRange where = i < node->fieldRanges.size() ? node->fieldRanges[i] : node->range;
         checkType(node->type->fields[i].type, where);
-        if (i < node->type->defaults.size()) visitNode(node->type->defaults[i].get());
+        if (i < node->type->defaults.size()) { visitNode(node->type->defaults[i].get()); checkNarrowing(node->type->fields[i].type, node->type->defaults[i].get()); }
     }
     for (size_t i = 0; i < node->methods.size() && i < sym.methods.size(); ++i) {
         const Symbol& method = sym.methods[i];
@@ -557,6 +558,7 @@ void SemanticAnalyzer::visitMethodCall(const MethodCallNode* node) {
         for (const auto& member : named->methods) {
             if (member.name != node->name) continue;
             symbolRefs.push_back({node->nameRange, member});
+            for (size_t i = 0; i < node->args.size() && i < member.params.size(); ++i) checkNarrowing(member.params[i].type, node->args[i].get());
             if (member.kind == SymbolKind::Function && member.params.size() != node->args.size())
                 diagnostics.push_back({DiagnosticSeverity::Error,
                     "Function '" + named->name + "." + node->name + "' expects " + std::to_string(member.params.size()) +
@@ -672,12 +674,80 @@ void SemanticAnalyzer::checkType(const std::string& written, SourceRange range) 
         diagnostics.push_back({DiagnosticSeverity::Error, "Unknown type '" + type + "'", range});
 }
 
+// Conservative type facts: unknown dynamic values are checked by the runtime.
+std::string SemanticAnalyzer::expressionType(const Node* node) {
+    if (!node) return "";
+    if (auto* n = dynamic_cast<const NumberNode*>(node)) return n->isFloat ? "float" : "int";
+    if (auto* v = dynamic_cast<const VarAccessNode*>(node)) {
+        const Symbol* symbol = variableOf(v);
+        return symbol ? symbol->type : "";
+    }
+    if (auto* u = dynamic_cast<const UnaryOpNode*>(node)) return expressionType(u->operand.get());
+    if (auto* b = dynamic_cast<const BinOpNode*>(node)) {
+        if (b->kind != runtime::Operator::Add && b->kind != runtime::Operator::Sub && b->kind != runtime::Operator::Mul && b->kind != runtime::Operator::Div && b->kind != runtime::Operator::Mod) return "";
+        auto left = expressionType(b->left.get()), right = expressionType(b->right.get());
+        if ((left == "int" || left == "float") && (right == "int" || right == "float"))
+            return left == "float" || right == "float" ? "float" : "int";
+    }
+    if (auto* f = dynamic_cast<const FuncCallNode*>(node)) {
+        const Symbol* symbol = currentScope->find(f->name);
+        if ((!symbol || symbol->kind == SymbolKind::Builtin) &&
+            (f->name == "min" || f->name == "max" || f->name == "clamp" || f->name == "abs")) {
+            bool allInt = !f->args.empty();
+            for (const auto& arg : f->args) {
+                auto type = expressionType(arg.get());
+                if (type == "float") return "float";
+                allInt = allInt && type == "int";
+            }
+            return allInt ? "int" : "";
+        }
+        if (symbol && (symbol->kind == SymbolKind::Function || symbol->kind == SymbolKind::Builtin)) return symbol->returnType;
+        if (!symbol) if (const auto* builtin = findBuiltinSpec(f->name)) return builtin->result;
+    }
+    if (auto* index = dynamic_cast<const IndexNode*>(node)) {
+        Value::Kind kind; std::string element;
+        if (runtime::containerType(expressionType(index->base.get()), kind, element)) return element;
+    }
+    if (auto* field = dynamic_cast<const FieldNode*>(node)) {
+        const Symbol* type = structOf(field->base.get());
+        if (type) for (const auto& param : type->params) if (param.name == field->name) return param.type;
+        Value::Kind kind; std::string element;
+        if (runtime::containerType(expressionType(field->base.get()), kind, element)) return element;
+    }
+    if (auto* method = dynamic_cast<const MethodCallNode*>(node)) {
+        const Symbol* owner = variableOf(method->base.get());
+        if (!owner || owner->kind != SymbolKind::Module) owner = structOf(method->base.get());
+        if (owner) for (const auto& member : owner->methods)
+            if (member.name == method->name) return member.returnType;
+    }
+    return "";
+}
+
+void SemanticAnalyzer::checkNarrowing(const std::string& declared, const Node* value) {
+    if (!value) return;
+    std::string type = isNullable(declared) ? declared.substr(0, declared.size() - 1) : declared;
+    if (type == "int" && expressionType(value) == "float") {
+        SourceRange where = value->range;
+        // Compound assignment synthesizes a binary expression without a range.
+        if (where.start.line == 0)
+            if (auto* binary = dynamic_cast<const BinOpNode*>(value)) where = binary->right->range;
+        diagnostics.push_back({DiagnosticSeverity::Error, "Cannot implicitly convert float to int; use to_int()", where});
+    }
+    Value::Kind kind; std::string element;
+    if (!runtime::containerType(type, kind, element)) return;
+    if (auto* array = dynamic_cast<const ArrayLiteralNode*>(value))
+        for (const auto& item : array->elements) checkNarrowing(element, item.get());
+    if (auto* map = dynamic_cast<const MapLiteralNode*>(value))
+        for (const auto& item : map->entries) checkNarrowing(element, item.second.get());
+}
+
 void SemanticAnalyzer::visitVarDecl(const VarDeclNode* node) {
     // func f = (n) => ... f(n - 1): a local lambda may call itself by its variable.
     bool recursive = !node->global && currentScope != rootScope.get() && node->type == "func" &&
                      dynamic_cast<const LambdaNode*>(node->expr.get());
     if (node->expr && !recursive) visitNode(node->expr.get());
     checkType(node->type, node->range);
+    checkNarrowing(node->type, node->expr.get());
     if (dynamic_cast<const NullNode*>(node->expr.get()) && !isNullable(node->type))
         diagnostics.push_back({DiagnosticSeverity::Error,
             "Variable '" + node->name + "' of type " + node->type + " cannot be null; declare it " + node->type + "?",
@@ -725,6 +795,7 @@ void SemanticAnalyzer::visitVarAssign(const VarAssignNode* node) {
     SourceRange where = node->nameRange.start.line > 0 ? node->nameRange : node->range;
     checkVariable(node->name, where);
     checkWritable(node->name, where);
+    if (const Symbol* variable = currentScope->find(node->name)) checkNarrowing(variable->type, node->expr.get());
     if (dynamic_cast<const NullNode*>(node->expr.get())) {
         const Symbol* variable = currentScope->find(node->name);
         if (!variable && !currentFuncReturnType.empty()) {
@@ -762,6 +833,7 @@ void SemanticAnalyzer::visitFuncCall(const FuncCallNode* node) {
         return;
     }
     if (sym && sym->kind == SymbolKind::Type && !builtin) {
+        for (size_t i = 0; i < node->args.size() && i < sym->params.size(); ++i) checkNarrowing(sym->params[i].type, node->args[i].get());
         // Name(values...) builds a struct; trailing fields may be left out.
         symbolRefs.push_back({targetRange, *sym});
         if (node->args.size() > sym->params.size())
@@ -778,6 +850,11 @@ void SemanticAnalyzer::visitFuncCall(const FuncCallNode* node) {
         }
     }
     symbolRefs.push_back({targetRange, *sym});
+    // Name resolution is independent of the argument types.
+    if (sym->kind == SymbolKind::Function) builtin = nullptr;
+    if (sym->kind == SymbolKind::Function || sym->kind == SymbolKind::Builtin)
+        for (size_t i = 0; i < node->args.size() && i < sym->params.size(); ++i)
+            checkNarrowing(sym->params[i].type, node->args[i].get());
 
     if (sym->kind == SymbolKind::Function && !builtin) {
         for (size_t i = 0; i < node->args.size() && i < sym->params.size(); ++i) {
@@ -789,7 +866,7 @@ void SemanticAnalyzer::visitFuncCall(const FuncCallNode* node) {
         }
     }
 
-    // A builtin and a module function may share a name (get); either signature is fine.
+    // The selected declaration alone determines arity.
     size_t count = node->args.size();
     bool fitsFunction = sym->kind == SymbolKind::Function && sym->params.size() == count;
     bool fitsBuiltin = builtin && builtin->acceptsCount(count);
@@ -827,6 +904,7 @@ void SemanticAnalyzer::visitLambda(const LambdaNode* node) {
 }
 
 void SemanticAnalyzer::visitReturn(const ReturnNode* node) {
+    checkNarrowing(currentFuncReturnType, node->expr.get());
     if (node->expr) visitNode(node->expr.get());
     if (currentFuncReturnType == "void" && node->expr != nullptr) {
         diagnostics.push_back({DiagnosticSeverity::Error, "Void function should not return a value", node->range});
@@ -896,8 +974,8 @@ void SemanticAnalyzer::visitBinOp(const BinOpNode* node) {
 }
 
 void SemanticAnalyzer::visitArrayDecl(const ArrayDeclNode* node) {
-    visitNode(node->sizeNode.get());
     visitNode(node->initializer.get());
+    checkNarrowing(node->type, node->initializer.get());
     checkType(node->type, node->nameRange.start.line > 0 ? node->nameRange : node->range);
     Symbol sym;
     sym.name = node->name;

@@ -203,6 +203,8 @@ private:
     void visitEnumDef(const EnumDefNode* node);
     void visitTry(const TryNode* node);
     void checkType(const std::string& type, SourceRange range);
+    std::string expressionType(const Node* node);
+    void checkNarrowing(const std::string& type, const Node* value);
     void checkVariable(const std::string& name, SourceRange range);
     void checkWritable(const std::string& name, SourceRange range);
     void addSymbol(Scope* scope, const Symbol& symbol, SourceRange nameRange, bool warnOnRedeclaration);

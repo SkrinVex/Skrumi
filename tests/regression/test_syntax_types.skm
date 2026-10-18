@@ -23,7 +23,7 @@ assert_true(b2 == false, "bool false");
 float promoted = 10;
 assert_true(promoted == 10, "int to float promotion");
 
-int truncated = 9.99;
+int truncated = to_int(9.99);
 assert_true(truncated == 9, "float to int truncation");
 
 // 3. String concatenation with numbers
@@ -37,12 +37,12 @@ assert_true(fconcat == "Float: 2.5", "string float concat");
 void do_nothing() {}
 do_nothing();
 
-// 5. Any scalar can be stored in a string; float and int convert both ways
+// 5. Any scalar can be stored in a string; float narrowing is explicit
 string text = 5;
 text = true;
 assert_true(text == "true", "bool stored in a string");
-int from_float = 7.9;
-from_float = -7.9;
+int from_float = to_int(7.9);
+from_float = to_int(-7.9);
 assert_true(from_float == -7, "float to int truncates toward zero");
 
 // 6. Parameters and return values are converted to their declared types
@@ -55,7 +55,7 @@ string describe(string value) {
 }
 assert_true(describe(42) == "<42>", "int argument for a string parameter");
 int truncate(float value) {
-    return value;
+    return to_int(value);
 }
 assert_true(truncate(2.9) == 2, "float return value narrowed to int");
 

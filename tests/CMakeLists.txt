@@ -280,3 +280,6 @@ set_tests_properties(installer_gui_ru PROPERTIES TIMEOUT 180 LABELS standalone S
 add_test(NAME installer_translations COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_translations.py $<TARGET_FILE:skrumi>)
 
 add_test(NAME brand_audit COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_brand_audit.py)
+
+add_test(NAME language_contracts COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_language_contracts.py $<TARGET_FILE:skrumi>)
+set_tests_properties(language_contracts PROPERTIES TIMEOUT 120)

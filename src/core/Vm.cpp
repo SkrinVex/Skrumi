@@ -636,8 +636,8 @@ SKRUMI_APART void refresh(CallSite& site, Context& root) {
 // its name with a builtin.
 SKRUMI_APART void callOther(const CallSite& site, Value* args, size_t count, Context& root) {
     // A builtin and a Skrumi function may share a name, like get(items, i) and the
-    // server's get(path, handler). The builtin wins whenever the arguments fit it.
-    if (site.builtin && (!site.function || runtime::acceptsArguments(*site.builtin, Arguments(args, count)))) {
+    // server's get(path, handler). A Skrumi declaration always shadows the builtin.
+    if (site.builtin && !site.function) {
         Value result = runtime::invoke(*site.builtin, Arguments(args, count), root);
         args[0] = std::move(result);
         return;
@@ -724,12 +724,6 @@ SKRUMI_COLD int recover(const Proto& proto, int pc, Value* R, DebugFrame* debug,
 
 [[noreturn]] SKRUMI_COLD void alreadyDeclared(const std::string& name) {
     throw std::runtime_error("Runtime Error: Variable '" + name + "' is already declared in this scope");
-}
-
-SKRUMI_COLD Value sizedArray(const Value& size, const std::string& name) {
-    long long count = intArg(size, "size of array", name);
-    if (count < 0) throw std::runtime_error("Runtime Error: Array size cannot be negative");
-    return runtime::makeArray(ValueList(static_cast<size_t>(count), Value::integer(0)));
 }
 
 // The slow paths of instructions, apart from the loop: each would otherwise keep its
@@ -944,7 +938,6 @@ Value execute(Proto& entry, Value* R, Context& root, Context& entryScope, DebugF
         &&L_Coerce,
         &&L_Assign,
         &&L_Zero,
-        &&L_NewSized,
         &&L_Fail,
         &&L_Add,
         &&L_Sub,
@@ -1063,9 +1056,6 @@ Value execute(Proto& entry, Value* R, Context& root, Context& entryScope, DebugF
                     }
                     OP(Zero):
                         R[in->a] = runtime::zeroValue(K[in->b].str(), root);
-                        NEXT;
-                    OP(NewSized):
-                        R[in->a] = sizedArray(R[in->b], K[in->c].str());
                         NEXT;
                     OP(Fail):
                         raise(K[in->a].str());

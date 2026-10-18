@@ -1,3 +1,29 @@
+# Skrumi 10.0.0 — explicit narrowing and deterministic calls
+
+- Breaking: implicit float-to-int narrowing is rejected for declarations,
+  assignments, parameters, results, fields and typed-container writes. Use
+  to_int() explicitly, including for integral-valued floats. Builtin int
+  parameters and array indices also require int. Int-to-float widening remains.
+- CLI check and LSP report known narrowing in literals, numeric expressions,
+  declared variables, calls, fields and nested container literals. Unknown
+  dynamic types remain runtime-checked; this is not full static type inference.
+- Breaking: remove the sized array declaration syntax. Use an ordinary empty
+  declaration followed by resize(name, length). Remove its AST size member,
+  compiler branch, bytecode instruction and VM handler.
+- Breaking: a declared Skrumi function shadows a builtin by name, regardless of
+  argument types/count. Direct calls and function values agree; invalid arguments
+  do not select another implementation. Module aliases explicitly select exports.
+- Correct the reference's array equality description and complete type_of
+  results in the reference and builtin/LSP help. Execute marked documentation
+  examples with assertions instead of only passing them through check.
+- Add transactional Fish PATH integration in its native conf.d fragment, honoring
+  XDG_CONFIG_HOME. Preserve user content, avoid duplicate PATH entries, safely
+  quote literal paths and restore snapshots on rollback. csh/tcsh remain unsupported.
+- Fix permission snapshots for a newly created shell configuration: use the same
+  symbolic permission format as fs_permissions so a valid rollback is accepted.
+- Migrate standard tests and installer arithmetic to explicit conversions; keep
+  installer layout, GUI workflow, VM hot-path optimization and release assets.
+
 # Skrumi 9.0.1 — recover installation after manual directory deletion
 
 - Windows setup automatically recovers registration ownership when the main

@@ -34,6 +34,7 @@ long long intArgument(const Value& value, const char* what) {
     if (value.isInt() && value.asInt() >= -2147483648LL && value.asInt() <= 2147483647LL) return value.asInt();
     long long result = 0;
     if (tryInt(value, result)) return result;
+    if (value.isFloat()) throw std::runtime_error("Type Error: " + std::string(what) + " requires int; use to_int()");
     return toInt(value, what);
 }
 
