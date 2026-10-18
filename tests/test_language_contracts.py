@@ -16,7 +16,7 @@ with tempfile.TemporaryDirectory(prefix="skrumi-contracts-") as temp:
         assert (p.returncode == 0) == ok, (code, p.stdout, p.stderr)
         return p
     for code in [
-        "int x = 2.0;", "int x = 1; x = 2.5;", "int x = 1; x += 2.5;",
+        "int x = 2.0;", "int x = min(2.0, 3);", "int x = 1; x = 2.5;", "int x = 1; x += 2.5;",
         "int f() { return 2.5; } f();", "void f(int x) {} f(2.0);",
         "array<int> x = [1, 2.5];", "map<string,int> x = {a: 2.0};",
         "array<array<int>> x = [[2.0]];",
@@ -27,6 +27,7 @@ with tempfile.TemporaryDirectory(prefix="skrumi-contracts-") as temp:
     ]:
         for check in [False, True]:
             p = run(code, check=check, ok=False)
+            if check: assert ":0:0:" not in p.stdout+p.stderr, p
             assert "to_int()" in p.stdout+p.stderr or "must be int" in p.stdout+p.stderr, p
     for code in [
         "void f(x) { int y = x; } f(2.0);",

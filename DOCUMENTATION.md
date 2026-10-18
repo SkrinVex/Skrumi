@@ -2644,7 +2644,7 @@ handle; неизвестный handle вызывает ошибку. В брау
 - `array user_path_plan(string directory, bool add)` возвращает план
   `[backend, destination, before, after]`, ничего не записывая. `directory` абсолютируется.
 - `void user_path_validate(array plan)` проверяет форму снимков и разрешённую цель:
-  HKCU `Path` или поддерживаемый login-профиль текущего пользователя; некорректный
+  HKCU `Path` или поддерживаемый конфигурационный файл shell текущего пользователя; некорректный
   план вызывает `Environment Error` до записи. `apply` и `removal` вызывают эту проверку сами.
 - `void user_path_apply(array plan, bool reverse)` применяет план (`false`) или
   восстанавливает предыдущий снимок (`true`). Повторный вызов не дублирует запись.

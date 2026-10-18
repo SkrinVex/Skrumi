@@ -321,8 +321,8 @@ int UI_DIALOG_OFFSET = 0;
 string ui_dialog(string id, string title, string message, string kind) {
     float scale = 1;
     if (UI_FONT != 0) { scale = UI_FONT_SIZE / 14.0; }
-    int width = min(520 * scale, gfx_width() - 16);
-    int height = min(220 * scale, gfx_height() - 16);
+    int width = to_int(min(520 * scale, gfx_width() - 16));
+    int height = to_int(min(220 * scale, gfx_height() - 16));
     return ui_dialog_box(id, (gfx_width() - width) / 2, (gfx_height() - height) / 2, width, height, title, message, kind);
 }
 

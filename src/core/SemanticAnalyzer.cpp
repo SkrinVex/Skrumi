@@ -691,6 +691,16 @@ std::string SemanticAnalyzer::expressionType(const Node* node) {
     }
     if (auto* f = dynamic_cast<const FuncCallNode*>(node)) {
         const Symbol* symbol = currentScope->find(f->name);
+        if ((!symbol || symbol->kind == SymbolKind::Builtin) &&
+            (f->name == "min" || f->name == "max" || f->name == "clamp" || f->name == "abs")) {
+            bool allInt = !f->args.empty();
+            for (const auto& arg : f->args) {
+                auto type = expressionType(arg.get());
+                if (type == "float") return "float";
+                allInt = allInt && type == "int";
+            }
+            return allInt ? "int" : "";
+        }
         if (symbol && (symbol->kind == SymbolKind::Function || symbol->kind == SymbolKind::Builtin)) return symbol->returnType;
         if (!symbol) if (const auto* builtin = findBuiltinSpec(f->name)) return builtin->result;
     }
@@ -716,8 +726,13 @@ std::string SemanticAnalyzer::expressionType(const Node* node) {
 void SemanticAnalyzer::checkNarrowing(const std::string& declared, const Node* value) {
     if (!value) return;
     std::string type = isNullable(declared) ? declared.substr(0, declared.size() - 1) : declared;
-    if (type == "int" && expressionType(value) == "float")
-        diagnostics.push_back({DiagnosticSeverity::Error, "Cannot implicitly convert float to int; use to_int()", value->range});
+    if (type == "int" && expressionType(value) == "float") {
+        SourceRange where = value->range;
+        // Compound assignment synthesizes a binary expression without a range.
+        if (where.start.line == 0)
+            if (auto* binary = dynamic_cast<const BinOpNode*>(value)) where = binary->right->range;
+        diagnostics.push_back({DiagnosticSeverity::Error, "Cannot implicitly convert float to int; use to_int()", where});
+    }
     Value::Kind kind; std::string element;
     if (!runtime::containerType(type, kind, element)) return;
     if (auto* array = dynamic_cast<const ArrayLiteralNode*>(value))
