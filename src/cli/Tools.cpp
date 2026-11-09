@@ -78,6 +78,13 @@ std::vector<std::string> testNames(const std::string& source, const std::string&
 
 } // namespace
 
+std::vector<std::string> sources(const std::vector<std::string>& paths) {
+    std::vector<std::string> out;
+    for (const auto& file : sourceFiles(paths, anySource)) out.push_back(platform::pathToUtf8(file));
+    if (out.empty()) throw std::runtime_error("no .skm source files found");
+    return out;
+}
+
 int format(const std::vector<std::string>& arguments) {
     bool check = false;
     std::vector<std::string> paths;
@@ -127,6 +134,13 @@ int test(const std::vector<std::string>& arguments) {
             continue;
         }
         size_t ran = 0;
+        if (names.empty() && filter.empty()) {
+            Interpreter interpreter;
+            auto result = interpreter.runFile(file);
+            if (result.success && result.exitCode == 0) { ++passed; std::cout << "  ok   (script)" << std::endl; }
+            else { ++failed; std::cout << "  FAIL (script): " << result.errorMessage << std::endl; }
+            continue;
+        }
         for (const auto& name : names) {
             if (!filter.empty() && name.find(filter) == std::string::npos) continue;
             ++ran;

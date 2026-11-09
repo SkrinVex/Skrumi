@@ -35,7 +35,7 @@ function(skrumi_fonts)
         target_link_libraries(skrumi_core PRIVATE freetype)
     endif()
     file(READ "${freetype_SOURCE_DIR}/docs/FTL.TXT" font_license)
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/FontLicenses.h"
-        "#pragma once\ninline const char* skrumiFontLicense() { return R\"SKFONT(FreeType 2.14.1, used under the FreeType License\n${font_license})SKFONT\"; }\n")
+    file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/FontLicenses.h" CONTENT
+    "#pragma once\ninline const char* skrumiFontLicense() { return R\"SKFONT(FreeType 2.14.1, used under the FreeType License\n${font_license})SKFONT\"; }\n" @ONLY)
 endfunction()
 skrumi_fonts()

@@ -64,3 +64,132 @@ int load_font(string bytes) { return gfx_font_load(bytes); }
 void free_font(int font) { gfx_font_free(font); }
 int font_text_width(int font, string text, int pixels) { return gfx_font_width(font, text, pixels); }
 void draw_font_text(int font, int x, int y, string text, int pixels, int color) { gfx_font_text(font, x, y, text, pixels, color); }
+
+// Alpha 0..255 and font coverage. Font handle 0 denotes the built-in bitmap font.
+void draw_circle_alpha(int x, int y, int radius, int color, int alpha) { gfx_circle_alpha(x, y, radius, color, alpha); }
+void draw_line_alpha(int x1, int y1, int x2, int y2, int color, int alpha) { gfx_line_alpha(x1, y1, x2, y2, color, alpha); }
+void draw_ring_alpha(int x, int y, int radius, int thickness, int color, int alpha) { gfx_ring_alpha(x, y, radius, thickness, color, alpha); }
+void draw_text_alpha(int x, int y, string text, int scale, int color, int alpha) { gfx_text_alpha(x, y, text, scale, color, alpha); }
+int font_with_fallback(int body, int fallback) { return gfx_font_fallback(body, fallback); }
+bool text_supported(int font, string text) { return gfx_text_supported(font, text); }
+array text_missing_glyphs(int font, string text) { return gfx_text_missing(font, text); }
+
+/// Загружает TTF/OTF из файла; ошибки чтения и формата не скрываются.
+int load_font_file(string path) { return load_font(read_file(path)); }
+/// Высота ячейки встроенного шрифта, включая место для нижних выносных элементов.
+int text_height(int scale) { if (scale < 1 || scale > 32) { throw "text scale must be 1..32"; } return 9 * scale; }
+
+void set_target_fps(int fps) { gfx_target_fps(fps); }
+void set_mouse_visible(bool visible) { gfx_mouse_visible(visible); }
+void set_mouse_captured(bool captured) { gfx_mouse_captured(captured); }
+array mouse_delta() { return gfx_mouse_delta(); }
+
+// Offscreen rendering, geometry and transformed sprites.
+/// Создать RGB canvas без окна; максимум 32 canvas, 32 миллиона пикселей суммарно.
+int create_canvas(int width, int height) { return gfx_canvas_create(width, height); }
+/// Выбрать canvas для рисования; 0 возвращает рисование в окно.
+void draw_to_canvas(int canvas) { gfx_canvas_select(canvas); }
+/// Освободить canvas; активная цель сбрасывается на окно.
+void free_canvas(int canvas) { gfx_canvas_free(canvas); }
+/// Копировать RGB canvas в текущую цель.
+void draw_canvas(int canvas, int x, int y) { gfx_canvas_draw(canvas, x, y); }
+/// PNG-байты canvas без сжатия; можно сохранить через fs_write_atomic.
+string canvas_png(int canvas) { return gfx_canvas_png(canvas); }
+/// Сохранить RGB framebuffer окна в PNG, без декораций окна.
+void save_screenshot(string path) { gfx_screenshot(path); }
+/// Заполненный многоугольник: [x,y,x,y,...], 3..4096 вершин, правило even-odd.
+void draw_polygon(array points, int color) { gfx_polygon(points, color); }
+/// Заполненный эллипс с радиусами 0..8192.
+void draw_ellipse(int x, int y, int radius_x, int radius_y, int color) { gfx_ellipse(x, y, radius_x, radius_y, color); }
+/// RGB-градиент; vertical=true сверху вниз, false слева направо.
+void draw_gradient(int x, int y, int width, int height, int from, int to, bool vertical) { gfx_gradient(x, y, width, height, from, to, vertical); }
+/// Поворот вокруг центра масштабированной картинки; angle в радианах по часовой стрелке, alpha 0..255.
+void draw_image_ex(int image, int x, int y, float scale, float angle, bool flip_x, bool flip_y, int alpha) { gfx_image_ex(image, x, y, scale, angle, flip_x, flip_y, alpha); }
+/// Часть атласа с масштабом, поворотом вокруг центра и отражением; angle в радианах, alpha 0..255.
+void draw_image_part_ex(int image, int sx, int sy, int sw, int sh, int x, int y, float scale, float angle, bool flip_x, bool flip_y, int alpha) { gfx_image_part_ex(image, sx, sy, sw, sh, x, y, scale, angle, flip_x, flip_y, alpha); }
+/// TTF-текст с непрозрачностью alpha 0..255.
+void draw_font_text_alpha(int font, int x, int y, string text, int pixels, int color, int alpha) { gfx_font_text_alpha(font, x, y, text, pixels, color, alpha); }
+/// Пакет кругов: [x,y,radius,color,...].
+void draw_circles(array circles) { gfx_circles(circles); }
+/// Пакет линий: [x1,y1,x2,y2,color,...].
+void draw_lines(array lines) { gfx_lines(lines); }
+
+/// Треугольник; координаты вершин в пикселях.
+void draw_triangle(int x1, int y1, int x2, int y2, int x3, int y3, int color) {
+    draw_polygon([x1, y1, x2, y2, x3, y3], color);
+}
+/// align = left/center/right; x — точка привязки.
+void draw_text_aligned(int x, int y, string text, int scale, int color, string align) {
+    int width = text_width(text, scale);
+    if (align == "center") { x -= width / 2; }
+    else if (align == "right") { x -= width; }
+    else if (align != "left") { throw "text align must be left, center or right"; }
+    draw_text(x, y, text, scale, color);
+}
+/// Перенос по графемам встроенного шрифта; слишком широкая графема остаётся целой.
+string wrap_bitmap_text(string text, int width, int scale) {
+    if (width <= 0) { throw "wrap width must be positive"; }
+    text_height(scale);
+    string result = "";
+    int used = 0;
+    for (part in grapheme_split(text)) {
+        if (part == "\n" || part == "\r\n") { result += "\n"; used = 0; }
+        else {
+            int advance = text_width(part, scale) + scale;
+            if (used > 0 && used + advance - scale > width) { result += "\n"; used = 0; }
+            result += part;
+            used += advance;
+        }
+    }
+    return result;
+}
+void draw_text_wrapped(int x, int y, string text, int width, int scale, int color) {
+    draw_text(x, y, wrap_bitmap_text(text, width, scale), scale, color);
+}
+/// Однострочная обрезка без разрыва графем, с многоточием; если оно не помещается — пустая строка.
+string text_ellipsis(string text, int width, int scale) {
+    if (width < 0 || str_contains(text, "\n") || str_contains(text, "\r")) { throw "ellipsis requires a single line and non-negative width"; }
+    if (text_width(text, scale) <= width) { return text; }
+    int reserved = text_width("…", scale);
+    if (reserved > width) { return ""; }
+    string result = "";
+    int used = 0;
+    for (part in grapheme_split(text)) {
+        int advance = text_width(part, scale) + scale;
+        if (used + advance + reserved > width) { break; }
+        result += part; used += advance;
+    }
+    return result + "…";
+}
+/// PNG-атлас: равные ячейки, индекс слева направо, затем сверху вниз.
+void draw_icon(int atlas, int index, int x, int y, int frame_width, int frame_height, float scale) {
+    if (frame_width <= 0 || frame_height <= 0) { throw "icon frame dimensions must be positive"; }
+    int columns = image_width(atlas) / frame_width;
+    int rows = image_height(atlas) / frame_height;
+    if (columns == 0 || rows == 0 || index < 0 || index >= columns * rows) { throw "icon index outside atlas"; }
+    draw_image_part_ex(atlas, (index % columns) * frame_width, (index / columns) * frame_height,
+        frame_width, frame_height, x, y, scale, 0.0, false, false, 255);
+}
+/// 9-slice: одинаковая рамка border во всех направлениях; края не растягиваются по толщине.
+void draw_image_nine_slice(int image, int x, int y, int width, int height, int border) {
+    int sw = image_width(image);
+    int sh = image_height(image);
+    if (border < 1 || border * 2 >= sw || border * 2 >= sh || width < border * 2 || height < border * 2) {
+        throw "nine-slice requires a nonempty source centre and destination at least twice the border";
+    }
+    array<int> sx = [0, border, sw - border];
+    array<int> sy = [0, border, sh - border];
+    array<int> widths = [border, sw - border * 2, border];
+    array<int> heights = [border, sh - border * 2, border];
+    array<int> dx = [x, x + border, x + width - border];
+    array<int> dy = [y, y + border, y + height - border];
+    array<int> dw = [border, width - border * 2, border];
+    array<int> dh = [border, height - border * 2, border];
+    for (int row = 0; row < 3; row++) {
+        for (int col = 0; col < 3; col++) {
+            if (dw[col] > 0 && dh[row] > 0) {
+                draw_image_part(image, sx[col], sy[row], widths[col], heights[row], dx[col], dy[row], dw[col], dh[row]);
+            }
+        }
+    }
+}

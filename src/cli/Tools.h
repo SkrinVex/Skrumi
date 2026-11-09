@@ -6,6 +6,8 @@ namespace skrumi::cli {
 
 // skrumi fmt [--check] [paths...]: lays out .skm files (see formatSource); --check
 // only lists the files that would change and fails when there are any.
+std::vector<std::string> sources(const std::vector<std::string>& paths);
+
 int format(const std::vector<std::string>& arguments);
 
 // skrumi test [--filter text] [paths...]: runs the parameterless test_ functions of

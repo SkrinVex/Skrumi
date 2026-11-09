@@ -19,20 +19,27 @@ bool startsWithWord(const std::string& text, const std::string& word) {
 }
 
 // The code part of a line: strings stay, a // comment is cut off.
-std::string codeOf(const std::string& line) {
+std::string codeOf(const std::string& line, bool& blockComment) {
+    std::string code;
     bool inString = false;
     for (size_t i = 0; i < line.size(); ++i) {
         char c = line[i];
-        if (inString) {
-            if (c == '\\') ++i;
+        if (blockComment) {
+            if (c == '*' && i + 1 < line.size() && line[i + 1] == '/') {
+                blockComment = false; ++i;
+            }
+            code += ' ';
+        } else if (inString) {
+            code += c;
+            if (c == '\\' && i + 1 < line.size()) code += line[++i];
             else if (c == '"') inString = false;
-        } else if (c == '"') {
-            inString = true;
-        } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '/') {
-            return trim(line.substr(0, i));
-        }
+        } else if (c == '"') { inString = true; code += c;
+        } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '/') { break;
+        } else if (c == '/' && i + 1 < line.size() && line[i + 1] == '*') {
+            blockComment = true; ++i; code += ' ';
+        } else code += c;
     }
-    return line;
+    return trim(code);
 }
 
 struct Open {
@@ -69,13 +76,14 @@ std::string formatSource(const std::string& source) {
     int blankRun = 0;
     bool previousOpensBlock = true; // no blank lines at the start of the file
     bool continuation = false;
+    bool blockComment = false;
     for (const auto& raw : lines) {
         std::string content = trim(raw);
         if (content.empty()) {
             ++blankRun;
             continue;
         }
-        std::string code = codeOf(content);
+        std::string code = codeOf(content, blockComment);
         bool closesBlock = content[0] == '}';
         if (blankRun > 0 && !previousOpensBlock && !closesBlock) out += "\n";
         blankRun = 0;

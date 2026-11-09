@@ -27,6 +27,7 @@ public:
 private:
     std::vector<Token> tokens;
     size_t pos = 0;
+    bool collecting = false;
     const std::string* file = nullptr;
     std::vector<Diagnostic> diagnostics;
     std::vector<ModuleImport> imports;
@@ -54,6 +55,12 @@ private:
     std::unique_ptr<Node> mapLiteral();
 
     std::unique_ptr<Node> expression();
+    std::unique_ptr<Node> conditional();
+    std::unique_ptr<Node> bitOr();
+    std::unique_ptr<Node> bitXor();
+    std::unique_ptr<Node> bitAnd();
+    std::unique_ptr<Node> equality();
+    std::unique_ptr<Node> shift();
     std::unique_ptr<Node> logicalOr();
     std::unique_ptr<Node> logicalAnd();
     std::unique_ptr<Node> comparison();

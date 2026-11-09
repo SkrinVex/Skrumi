@@ -1,0 +1,59 @@
+/* Language improvements: side effects, precedence and checked int32 masks. */
+void test_game_language() {
+    int calls = 0;
+    func bump = () => { calls++; return 3; };
+    assert_equal(true ? 1 : bump(), 1);
+    assert_equal(false ? bump() : 2, 2);
+    assert_equal(calls, 0);
+    assert_equal(type_of(true ? 1 : (true ? 2.0 : 3)), "float");
+    assert_equal(get([true], 0) ? 1 : 2, 1);
+    assert_equal(false ? "A" : true ? "B" : "C", "B");
+    assert_equal((false || true) ? bump() : 0, 3);
+    assert_equal(calls, 1);
+    bool flag = true;
+    assert_equal(flag?1:2, 1);
+    assert_equal(flag ? null : 3 ?? 7, 7);
+    assert_equal(0xFF8800, 16746496);
+    assert_equal(0b1010_0011, 163);
+    assert_equal(1_000_000, 1000000);
+    assert_close(1.5e3, 1500.0, 0.0);
+    assert_close(1E-3, 0.001, 0.0);
+    assert_equal((1 << 31) >> 31, -1);
+    assert_equal(~0, -1);
+    assert_equal((0x55 & 0x0F) | 0b1000, 13);
+    assert_equal(7 ^ 3, 4);
+    assert_equal(1 << 2 + 1, 8);
+    int flags = 1;
+    flags |= 4;
+    flags <<= 2;
+    flags ^= 4;
+    assert_equal(flags, 16);
+    array<int> xs = [8, 9];
+    int i = 0;
+    assert_equal(xs[i++]++, 8);
+    assert_equal(i, 1);
+    assert_equal(xs[0], 9);
+    map<string, int> counters = {k: 4};
+    assert_equal(counters["k"]--, 4);
+    assert_equal(counters.k, 3);
+    array<array<int>> nested = [[1]];
+    assert_equal(nested[0][0]++, 1);
+    assert_equal(nested[0][0], 2);
+    int value = 4; /* quotes " and brackets } { are comments */
+    assert_equal(value, 4);
+}
+test_game_language();
+
+struct Stats { int hp = 4; }
+struct Unit {
+    Stats stats = Stats();
+    int hp = 2;
+    int advance() { return this.hp++; }
+}
+Unit unit = Unit();
+assert_equal(unit.advance(), 2);
+assert_equal(unit.hp, 3);
+assert_equal(unit.stats.hp++, 4);
+assert_equal(unit.stats.hp, 5);
+unit.stats.hp <<= 2;
+assert_equal(unit.stats.hp, 20);

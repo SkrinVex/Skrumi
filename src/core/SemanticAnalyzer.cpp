@@ -1,4 +1,5 @@
 #include "skrumi/SemanticAnalyzer.h"
+#include "../graphics/Builtins.h"
 #include "skrumi/Builtins.h"
 #include "skrumi/Lexer.h"
 #include "skrumi/Parser.h"
@@ -309,10 +310,39 @@ void SemanticAnalyzer::visitNode(const Node* node) {
         visitForIn(each);
     } else if (auto* sw = dynamic_cast<const SwitchNode*>(node)) {
         visitSwitch(sw);
+    } else if (auto* c = dynamic_cast<const ConditionalNode*>(node)) {
+        visitNode(c->condition.get()); visitNode(c->yes.get()); visitNode(c->no.get());
+        auto condition = expressionType(c->condition.get());
+        if (!condition.empty() && condition != "bool")
+            diagnostics.push_back({DiagnosticSeverity::Error, "conditional expression requires a bool condition", c->condition->range});
+        auto a = expressionType(c->yes.get()), b = expressionType(c->no.get());
+        bool numeric = (a == "int" || a == "float") && (b == "int" || b == "float");
+        bool nullable = (a == "null" && b != "void") || (b == "null" && a != "void") || a == b + "?" || b == a + "?";
+        if (!a.empty() && !b.empty() && a != b && !numeric && !nullable)
+            diagnostics.push_back({DiagnosticSeverity::Error, "conditional branches have incompatible types '" + a + "' and '" + b + "'", c->range});
     } else if (auto* bop = dynamic_cast<const BinOpNode*>(node)) {
         visitBinOp(bop);
     } else if (auto* un = dynamic_cast<const UnaryOpNode*>(node)) {
         visitNode(un->operand.get());
+        auto type = expressionType(un->operand.get());
+        if (un->op == "~" && !type.empty() && type != "int")
+            diagnostics.push_back({DiagnosticSeverity::Error, "bitwise ~ requires int", un->range});
+    } else if (auto* inc = dynamic_cast<const PathIncNode*>(node)) {
+        visitNode(inc->target.get());
+        const Node* root = inc->target.get();
+        bool optional = false;
+        for (;;) {
+            if (auto* field = dynamic_cast<const FieldNode*>(root)) {
+                optional = optional || field->optional;
+                root = field->base.get();
+            } else if (auto* index = dynamic_cast<const IndexNode*>(root)) root = index->base.get();
+            else break;
+        }
+        if (optional || !dynamic_cast<const VarAccessNode*>(root))
+            diagnostics.push_back({DiagnosticSeverity::Error, "postfix ++/-- requires an assignable variable, field or element; optional access cannot be assigned", inc->range});
+        auto type = expressionType(inc->target.get());
+        if (!type.empty() && type != "int" && type != "float")
+            diagnostics.push_back({DiagnosticSeverity::Error, "postfix ++/-- requires int or float", inc->range});
     } else if (auto* inc = dynamic_cast<const PostIncNode*>(node)) {
         checkVariable(inc->name, inc->range);
         checkWritable(inc->name, inc->range);
@@ -383,6 +413,7 @@ void SemanticAnalyzer::declareFunction(const FuncDefNode* node) {
 }
 
 void SemanticAnalyzer::visitFuncDef(const FuncDefNode* node) {
+    warnBuiltinShadow(node->name, "function", node->nameRange);
     declareFunction(node);
     const Symbol& fnSym = rootScope->symbols[node->name];
     symbolRefs.push_back({fnSym.declRange, fnSym});
@@ -414,6 +445,7 @@ void SemanticAnalyzer::visitFunctionBody(const FuncDefNode* node, SourceRange de
         paramSym.documentation = "parameter " + (param.type.empty() ? "" : param.type + " ") + param.name;
         paramSym.fileUri = currentFile;
         paramSym.declRange = named ? param.range : fnSym.declRange;
+        warnBuiltinShadow(param.name, "parameter", paramSym.declRange);
         currentScope->symbols[param.name] = paramSym;
         if (named) symbolRefs.push_back({param.range, paramSym});
     }
@@ -424,7 +456,18 @@ void SemanticAnalyzer::visitFunctionBody(const FuncDefNode* node, SourceRange de
     exitScope();
 }
 
+void SemanticAnalyzer::warnBuiltinShadow(const std::string& name, const std::string& role, SourceRange range) {
+    bool builtin = findBuiltinSpec(name) != nullptr;
+    if (!builtin) for (const auto& signature : graphics::signatures())
+        if (signature.name == name) { builtin = true; break; }
+    // Standard modules deliberately expose wrappers around native builtins.
+    bool standard = currentFile.find("/std/") != std::string::npos || currentFile.rfind("std:", 0) == 0;
+    if (builtin && !standard)
+        diagnostics.push_back({DiagnosticSeverity::Warning, "SKR2001: " + role + " '" + name + "' shadows a built-in name; rename it or use a module alias", range, "skrumi", 2001});
+}
+
 void SemanticAnalyzer::addSymbol(Scope* scope, const Symbol& sym, SourceRange nameRange, bool warnOnRedeclaration) {
+    warnBuiltinShadow(sym.name, sym.kind == SymbolKind::Parameter ? "parameter" : "variable", nameRange);
     if (warnOnRedeclaration && scope->findCurrent(sym.name) && scope->findCurrent(sym.name)->kind != SymbolKind::Builtin) {
         diagnostics.push_back({DiagnosticSeverity::Warning,
             "Redeclaration of variable '" + sym.name + "' in the same scope", nameRange});
@@ -682,8 +725,23 @@ std::string SemanticAnalyzer::expressionType(const Node* node) {
         const Symbol* symbol = variableOf(v);
         return symbol ? symbol->type : "";
     }
-    if (auto* u = dynamic_cast<const UnaryOpNode*>(node)) return expressionType(u->operand.get());
+    if (dynamic_cast<const StringNode*>(node) || dynamic_cast<const InterpolationNode*>(node)) return "string";
+    if (dynamic_cast<const BoolNode*>(node)) return "bool";
+    if (dynamic_cast<const NullNode*>(node)) return "null";
+    if (auto* c = dynamic_cast<const ConditionalNode*>(node)) {
+        auto a = expressionType(c->yes.get()), b = expressionType(c->no.get());
+        if (a == b) return a;
+        if ((a == "int" && b == "float") || (a == "float" && b == "int")) return "float";
+        if (a == "null" && !b.empty()) return isNullable(b) ? b : b + "?";
+        if (b == "null" && !a.empty()) return isNullable(a) ? a : a + "?";
+        if (a == b + "?") return a;
+        if (b == a + "?") return b;
+        return "";
+    }
+    if (auto* u = dynamic_cast<const UnaryOpNode*>(node)) return u->op == "!" ? "bool" : u->op == "~" ? "int" : expressionType(u->operand.get());
     if (auto* b = dynamic_cast<const BinOpNode*>(node)) {
+        if (b->kind >= runtime::Operator::Eq && b->kind <= runtime::Operator::Or) return "bool";
+        if (b->kind >= runtime::Operator::BitAnd && b->kind <= runtime::Operator::ShiftRight) return "int";
         if (b->kind != runtime::Operator::Add && b->kind != runtime::Operator::Sub && b->kind != runtime::Operator::Mul && b->kind != runtime::Operator::Div && b->kind != runtime::Operator::Mod) return "";
         auto left = expressionType(b->left.get()), right = expressionType(b->right.get());
         if ((left == "int" || left == "float") && (right == "int" || right == "float"))
@@ -701,8 +759,9 @@ std::string SemanticAnalyzer::expressionType(const Node* node) {
             }
             return allInt ? "int" : "";
         }
-        if (symbol && (symbol->kind == SymbolKind::Function || symbol->kind == SymbolKind::Builtin)) return symbol->returnType;
-        if (!symbol) if (const auto* builtin = findBuiltinSpec(f->name)) return builtin->result;
+        if (symbol && (symbol->kind == SymbolKind::Function || symbol->kind == SymbolKind::Builtin))
+            return symbol->returnType == "any" ? "" : symbol->returnType;
+        if (!symbol) if (const auto* builtin = findBuiltinSpec(f->name)) return builtin->result == "any" ? "" : builtin->result;
     }
     if (auto* index = dynamic_cast<const IndexNode*>(node)) {
         Value::Kind kind; std::string element;
@@ -895,6 +954,7 @@ void SemanticAnalyzer::visitLambda(const LambdaNode* node) {
         paramSym.documentation = "parameter " + (param.type.empty() ? "" : param.type + " ") + param.name;
         paramSym.fileUri = currentFile;
         paramSym.declRange = param.range;
+        warnBuiltinShadow(param.name, "parameter", paramSym.declRange);
         currentScope->symbols[param.name] = paramSym;
         symbolRefs.push_back({param.range, paramSym});
     }
@@ -971,6 +1031,13 @@ void SemanticAnalyzer::visitSwitch(const SwitchNode* node) {
 void SemanticAnalyzer::visitBinOp(const BinOpNode* node) {
     visitNode(node->left.get());
     visitNode(node->right.get());
+    if (node->kind >= runtime::Operator::BitAnd && node->kind <= runtime::Operator::ShiftRight) {
+        for (auto* operand : {node->left.get(), node->right.get()}) {
+            auto type = expressionType(operand);
+            if (!type.empty() && type != "int")
+                diagnostics.push_back({DiagnosticSeverity::Error, "operator '" + node->op + "' requires int operands", operand->range});
+        }
+    }
 }
 
 void SemanticAnalyzer::visitArrayDecl(const ArrayDeclNode* node) {
@@ -1288,7 +1355,7 @@ std::vector<CompletionItem> SemanticAnalyzer::getCompletions(int line, int col) 
             "`string? nick = null;`. `a ?? b` — `a`, если оно не `null`, иначе `b`; `user?.name` — `null` вместо ошибки, когда `user` — `null`."},
         {"this", "(keyword) this", "Внутри метода структуры — значение, у которого метод вызван: `this.x`."},
         {"false", "(keyword) false", "Логическая ложь."},
-        {"array", "(keyword) array <name> [size | = value];", "Массив: `array имя размер;`, `array имя = [1, 2, 3];` или пустой `array имя;`. "
+        {"array", "(keyword) array <name> [= value];", "Массив: `array имя = [1, 2, 3];` или пустой `array имя;`. Для изменения длины используйте `resize`. "
             "Элементы читаются и пишутся как `имя[i]`, размер меняют `push`, `pop` и `resize`. Тип `array` допустим у параметров и результата функции."}
     };
     for (const auto& kd : kwDocs) {

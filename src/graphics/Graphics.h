@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 
 namespace skrumi::graphics {
 class Font;
@@ -19,15 +20,22 @@ public:
     void rectangle(int x, int y, int width, int height, uint32_t color);
     // Mixes color into the rectangle: alpha 0 leaves it, 255 covers it.
     void blend(int x, int y, int width, int height, uint32_t color, int alpha);
-    void circle(int x, int y, int radius, uint32_t color);
-    void text(int x, int y, const std::string& text, int scale, uint32_t color);
-    void line(int x1, int y1, int x2, int y2, uint32_t color);
+    void circle(int x, int y, int radius, uint32_t color, int alpha = 255);
+    void text(int x, int y, const std::string& text, int scale, uint32_t color, int alpha = 255);
+    void line(int x1, int y1, int x2, int y2, uint32_t color, int alpha = 255);
     void frame(int x, int y, int width, int height, int thickness, uint32_t color);
-    void ring(int x, int y, int radius, int thickness, uint32_t color);
+    void ring(int x, int y, int radius, int thickness, uint32_t color, int alpha = 255);
     // The part (sx, sy, sw, sh) of a picture stretched over (x, y, width, height), its own
     // transparency mixed in and the whole scaled by opacity 0..255.
     void image(const Image& picture, int sx, int sy, int sw, int sh, int x, int y, int width, int height, int opacity);
+    void imageEx(const Image& picture, int sx, int sy, int sw, int sh, int x, int y,
+                 double scale, double radians, bool flipX, bool flipY, int opacity);
+    void polygon(const std::vector<std::array<int, 2>>& points, uint32_t color);
+    void ellipse(int x, int y, int rx, int ry, uint32_t color);
+    void gradient(int x, int y, int width, int height, uint32_t from, uint32_t to, bool vertical);
+    std::string png() const;
     // Width in pixels of the widest line of text drawn at this scale.
+    static bool hasGlyph(char32_t cp);
     static int textWidth(const std::string& text, int scale);
     int width() const { return width_; }
     int height() const { return height_; }
@@ -43,6 +51,19 @@ private:
     int width_, height_;
     std::vector<uint32_t> pixels_;
     std::vector<Clip> clips_;
+};
+
+// Offscreen RGB surfaces are local to the interpreter. Handle 0 selects its window.
+class Canvases {
+public:
+    int create(int width, int height);
+    Surface& get(int handle);
+    void release(int handle);
+    void select(int handle) { if (handle) get(handle); selected = handle; }
+    int selected = 0;
+private:
+    int next_ = 1;
+    std::map<int, std::unique_ptr<Surface>> surfaces_;
 };
 
 class Window;
@@ -123,6 +144,12 @@ public:
     Window& operator=(const Window&) = delete;
     bool poll();
     void present();
+    void setTargetFps(int fps);
+    void setMouseVisible(bool visible);
+    void setMouseCaptured(bool captured);
+    bool mouseVisible() const { return mouseVisible_; }
+    int mouseDeltaX() const { return mouseDeltaX_; }
+    int mouseDeltaY() const { return mouseDeltaY_; }
     bool keyDown(const std::string& key) const;
     bool keyPressed(const std::string& key) const;
     // Pressed in this frame, or repeated by the OS while held: for editing and lists.
@@ -149,7 +176,10 @@ public:
     }
     void wheelEvent(int steps) { wheel_ += steps; }
     void focusEvent(bool focused);
-    void mouseEvent(int x, int y) { mouseX_ = x; mouseY_ = y; }
+    void mouseEvent(int x, int y) {
+        if (mouseKnown_) { mouseDeltaX_ += x - mouseX_; mouseDeltaY_ += y - mouseY_; }
+        mouseKnown_ = true; mouseX_ = x; mouseY_ = y;
+    }
     // Requests may be deferred by an application; destruction cannot be cancelled.
     void closeEvent() { if (interceptClose_) closeRequested_ = true; else open_ = false; }
     void destroyedEvent() { open_ = false; closeRequested_ = false; }
@@ -187,6 +217,10 @@ private:
     int pendingWidth_ = 0, pendingHeight_ = 0;
     void applySize(int width, int height);
     int mouseX_ = 0, mouseY_ = 0;
+    int mouseDeltaX_ = 0, mouseDeltaY_ = 0, targetFps_ = 0;
+    bool mouseVisible_ = true, mouseCaptured_ = false, mouseKnown_ = false;
+    void centerMouse();
+    std::chrono::steady_clock::time_point nextFrame_{};
     double delta_ = 1.0 / 60.0;
     std::chrono::steady_clock::time_point lastPoll_ = std::chrono::steady_clock::now();
     static int keyCode(const std::string& key);

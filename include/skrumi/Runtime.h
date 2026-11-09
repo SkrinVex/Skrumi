@@ -74,7 +74,7 @@ Value realResult(double result);
 Value parseScalar(const std::string& type, const std::string& text, const std::string& what);
 
 // A binary operator, decided once from its text ("+", "+=", "<"); Unknown for anything else.
-enum class Operator : unsigned char { Add, Sub, Mul, Div, Mod, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Unknown };
+enum class Operator : unsigned char { Add, Sub, Mul, Div, Mod, Eq, Ne, Lt, Le, Gt, Ge, And, Or, BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight, Unknown };
 Operator operatorOf(const std::string& text);
 
 // Converts a value for storage in a slot of the given type: a variable, a parameter

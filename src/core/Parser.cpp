@@ -8,7 +8,9 @@ namespace {
 
 bool isAssignment(TokenType type) {
     return type == TokenType::ASSIGN || type == TokenType::PLUS_ASSIGN || type == TokenType::MINUS_ASSIGN ||
-           type == TokenType::STAR_ASSIGN || type == TokenType::SLASH_ASSIGN || type == TokenType::MOD_ASSIGN;
+           type == TokenType::STAR_ASSIGN || type == TokenType::SLASH_ASSIGN || type == TokenType::MOD_ASSIGN ||
+           type == TokenType::BIT_AND_ASSIGN || type == TokenType::BIT_OR_ASSIGN || type == TokenType::BIT_XOR_ASSIGN ||
+           type == TokenType::SHL_ASSIGN || type == TokenType::SHR_ASSIGN;
 }
 
 template <typename NodeType>
@@ -64,10 +66,12 @@ Parser::Parser(std::vector<Token> t, std::string curFile)
         tokens = std::move(merged);
     }
     // `string?` is one type: the ? joins the type's token, so everything that looks for a
-    // type sees the same token kind as for `string`. A ? has no other use.
+    // type sees the same token kind as for `string`. In expression positions a ?
+    // remains separate for the conditional operator.
     std::vector<Token> joined;
     joined.reserve(tokens.size());
-    for (auto& token : tokens) {
+    for (size_t index = 0; index < tokens.size(); ++index) {
+        auto& token = tokens[index];
         if (token.type == TokenType::QUESTION && !joined.empty()) {
             Token& type = joined.back();
             bool typeToken = type.type == TokenType::IDENTIFIER || type.type == TokenType::INT_KW ||
@@ -75,7 +79,22 @@ Parser::Parser(std::vector<Token> t, std::string curFile)
                              type.type == TokenType::BOOL_KW || type.type == TokenType::ARRAY ||
                              type.type == TokenType::MAP_KW || type.type == TokenType::FUNC_KW;
             bool touching = type.range.end.line == token.range.start.line && type.range.end.column == token.range.start.column;
-            if (typeToken && touching && type.value.back() != '?') {
+            bool declaration = type.type != TokenType::IDENTIFIER;
+            if (!declaration && index + 2 < tokens.size() && tokens[index + 1].type == TokenType::IDENTIFIER) {
+                auto following = tokens[index + 2].type;
+                declaration = following == TokenType::ASSIGN || following == TokenType::SEMICOLON ||
+                              following == TokenType::COMMA || following == TokenType::RPAREN;
+                if (following == TokenType::LPAREN) {
+                    int depth = 1;
+                    size_t after = index + 3;
+                    for (; after < tokens.size() && depth; ++after) {
+                        if (tokens[after].type == TokenType::LPAREN) ++depth;
+                        if (tokens[after].type == TokenType::RPAREN) --depth;
+                    }
+                    declaration = depth == 0 && after < tokens.size() && tokens[after].type == TokenType::LBRACE;
+                }
+            }
+            if (typeToken && declaration && touching && type.value.back() != '?') {
                 type.value += "?";
                 type.range.end = token.range.end;
                 continue;
@@ -112,6 +131,12 @@ void Parser::fail(const std::string& message) const {
 }
 
 Token Parser::consume(TokenType type) {
+    if (collecting && type == TokenType::SEMICOLON && !check(type) &&
+        (check(TokenType::RBRACE) || check(TokenType::RETURN) || check(TokenType::IF) ||
+         check(TokenType::FOR) || check(TokenType::WHILE) || isTypeKeyword())) {
+        diagnostics.push_back({DiagnosticSeverity::Error, "Syntax Error: expected ';' before '" + peek().value + "'", peek().range});
+        return {TokenType::SEMICOLON, ";", peek().line, peek().column, peek().range};
+    }
     if (!check(type)) fail(std::string("expected ") + tokenTypeName(type));
     return tokens[pos++];
 }
@@ -180,6 +205,7 @@ std::unique_ptr<Node> Parser::parseExpression() {
 
 std::unique_ptr<BlockNode> Parser::parseProgramWithDiagnostics(std::vector<Diagnostic>& outDiagnostics) {
     diagnostics.clear();
+    collecting = true;
     auto program = std::make_unique<BlockNode>();
     program->scoped = false;
     program->file = file;
@@ -196,6 +222,7 @@ std::unique_ptr<BlockNode> Parser::parseProgramWithDiagnostics(std::vector<Diagn
         }
     }
     program->range = {start, previousEnd()};
+    collecting = false;
     outDiagnostics = diagnostics;
     return program;
 }
@@ -207,7 +234,19 @@ std::unique_ptr<BlockNode> Parser::parseBlock() {
     block->file = file;
     while (!check(TokenType::RBRACE)) {
         if (check(TokenType::END)) fail("expected '}' to close the block");
-        block->stmts.push_back(statement());
+        size_t before = pos;
+        try {
+            block->stmts.push_back(statement());
+        } catch (const SyntaxError& e) {
+            if (!collecting) throw;
+            diagnostics.push_back({DiagnosticSeverity::Error, e.message(), peek().range});
+            // Preserve the closing brace; it belongs to this block.
+            if (!check(TokenType::RBRACE)) {
+                if (pos == before && !check(TokenType::END)) ++pos;
+                while (!check(TokenType::END) && !check(TokenType::RBRACE) && !check(TokenType::SEMICOLON)) ++pos;
+                match(TokenType::SEMICOLON);
+            }
+        }
     }
     consume(TokenType::RBRACE);
     return at(std::move(block), start, previousEnd());
@@ -452,7 +491,7 @@ std::unique_ptr<Node> Parser::simpleStatement() {
         if (isAssignment(peek().type)) {
             Token op = tokens[pos++];
             auto value = expression();
-            std::string combine = op.type == TokenType::ASSIGN ? "=" : op.value.substr(0, 1);
+            std::string combine = op.type == TokenType::ASSIGN ? "=" : op.value.substr(0, op.value.size() - 1);
             return at(std::make_unique<SetNode>(std::move(target), std::move(value), combine), start, previousEnd());
         }
         pos = mark;
@@ -658,10 +697,63 @@ std::unique_ptr<Node> Parser::switchStatement() {
 
 std::unique_ptr<Node> Parser::expression() {
     SourcePosition start = peek().range.start;
-    auto node = logicalOr();
+    auto node = conditional();
     // a ?? b ?? c: the first that is not null; the right side runs only when needed.
     while (match(TokenType::QUESTION_QUESTION))
-        node = at(std::make_unique<BinOpNode>("??", std::move(node), logicalOr()), start, previousEnd());
+        node = at(std::make_unique<BinOpNode>("??", std::move(node), conditional()), start, previousEnd());
+    return node;
+}
+
+std::unique_ptr<Node> Parser::conditional() {
+    SourcePosition start = peek().range.start;
+    auto condition = logicalOr();
+    if (!match(TokenType::QUESTION)) return condition;
+    auto yes = expression();
+    consume(TokenType::COLON);
+    auto no = conditional();
+    return at(std::make_unique<ConditionalNode>(std::move(condition), std::move(yes), std::move(no)), start, previousEnd());
+}
+
+std::unique_ptr<Node> Parser::bitOr() {
+    SourcePosition start = peek().range.start;
+    auto node = bitXor();
+    while (match(TokenType::BIT_OR)) node = at(std::make_unique<BinOpNode>("|", std::move(node), bitXor()), start, previousEnd());
+    return node;
+}
+
+std::unique_ptr<Node> Parser::bitXor() {
+    SourcePosition start = peek().range.start;
+    auto node = bitAnd();
+    while (match(TokenType::BIT_XOR)) node = at(std::make_unique<BinOpNode>("^", std::move(node), bitAnd()), start, previousEnd());
+    return node;
+}
+
+std::unique_ptr<Node> Parser::bitAnd() {
+    SourcePosition start = peek().range.start;
+    auto node = equality();
+    while (match(TokenType::BIT_AND)) node = at(std::make_unique<BinOpNode>("&", std::move(node), equality()), start, previousEnd());
+    return node;
+}
+
+std::unique_ptr<Node> Parser::equality() {
+    SourcePosition start = peek().range.start;
+    auto node = comparison();
+    while (check(TokenType::EQ) || check(TokenType::NEQ)) {
+        std::string op = tokens[pos++].value;
+        node = at(std::make_unique<BinOpNode>(op, std::move(node), comparison()), start, previousEnd());
+    }
+    return node;
+}
+
+std::unique_ptr<Node> Parser::shift() {
+    SourcePosition start = peek().range.start;
+    auto node = addition();
+    while ((check(TokenType::LT) || check(TokenType::GT)) && peek(1).type == peek().type &&
+           peek().range.end.byteOffset == peek(1).range.start.byteOffset) {
+        std::string op = peek().value + peek(1).value;
+        pos += 2;
+        node = at(std::make_unique<BinOpNode>(op, std::move(node), addition()), start, previousEnd());
+    }
     return node;
 }
 
@@ -674,18 +766,18 @@ std::unique_ptr<Node> Parser::logicalOr() {
 
 std::unique_ptr<Node> Parser::logicalAnd() {
     SourcePosition start = peek().range.start;
-    auto node = comparison();
-    while (match(TokenType::AND)) node = at(std::make_unique<BinOpNode>("&&", std::move(node), comparison()), start, previousEnd());
+    auto node = bitOr();
+    while (match(TokenType::AND)) node = at(std::make_unique<BinOpNode>("&&", std::move(node), bitOr()), start, previousEnd());
     return node;
 }
 
 std::unique_ptr<Node> Parser::comparison() {
     SourcePosition start = peek().range.start;
-    auto node = addition();
-    while (check(TokenType::EQ) || check(TokenType::NEQ) || check(TokenType::LT) ||
+    auto node = shift();
+    while (check(TokenType::LT) ||
            check(TokenType::GT) || check(TokenType::LTE) || check(TokenType::GTE)) {
         std::string op = tokens[pos++].value;
-        node = at(std::make_unique<BinOpNode>(op, std::move(node), addition()), start, previousEnd());
+        node = at(std::make_unique<BinOpNode>(op, std::move(node), shift()), start, previousEnd());
     }
     return node;
 }
@@ -720,6 +812,9 @@ std::unique_ptr<Node> Parser::unary() {
         }
         return at(std::make_unique<UnaryOpNode>("-", unary()), start, previousEnd());
     }
+    if (check(TokenType::INC) || check(TokenType::DEC))
+        error("prefix ++/-- is not supported; use postfix x++/x-- or += 1/-= 1");
+    if (match(TokenType::BIT_NOT)) return at(std::make_unique<UnaryOpNode>("~", unary()), start, previousEnd());
     if (match(TokenType::NOT)) return at(std::make_unique<UnaryOpNode>("!", unary()), start, previousEnd());
     return primary();
 }
@@ -762,6 +857,14 @@ std::unique_ptr<Node> Parser::postfix(std::unique_ptr<Node> node, SourcePosition
             call->args = arguments(TokenType::RPAREN);
             node = at(std::move(call), start, previousEnd());
         } else {
+            if (check(TokenType::INC) || check(TokenType::DEC)) {
+                int delta = tokens[pos++].type == TokenType::INC ? 1 : -1;
+                if (auto* variable = dynamic_cast<VarAccessNode*>(node.get()))
+                    return at(std::make_unique<PostIncNode>(variable->name, delta), start, previousEnd());
+                if (!dynamic_cast<IndexNode*>(node.get()) && !dynamic_cast<FieldNode*>(node.get()))
+                    error("postfix ++/-- requires a variable, field or element");
+                return at(std::make_unique<PathIncNode>(std::move(node), delta), start, previousEnd());
+            }
             return node;
         }
     }

@@ -1,3 +1,18 @@
+add_executable(test_unicode unit/test_unicode.cpp)
+add_executable(test_rendering unit/test_rendering.cpp)
+target_link_libraries(test_rendering PRIVATE skrumi_core)
+add_test(NAME unit_rendering COMMAND test_rendering)
+add_executable(test_window_controls unit/test_window_controls.cpp)
+target_link_libraries(test_window_controls PRIVATE skrumi_core)
+add_test(NAME unit_window_controls COMMAND test_window_controls)
+set_tests_properties(unit_window_controls PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE TIMEOUT 30)
+target_link_libraries(test_unicode PRIVATE skrumi_core)
+add_test(NAME unit_unicode COMMAND test_unicode ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/GraphemeBreakTest.txt)
+
+add_executable(test_audio unit/test_audio.cpp)
+target_link_libraries(test_audio PRIVATE skrumi_core)
+add_test(NAME unit_audio COMMAND test_audio)
+
 add_executable(test_font unit/test_font.cpp)
 target_link_libraries(test_font PRIVATE skrumi_core)
 add_test(NAME unit_font COMMAND test_font ${PROJECT_SOURCE_DIR}/installer/assets/DejaVuSans.ttf)
@@ -58,6 +73,8 @@ add_test(NAME lsp_catalog COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_D
 set_tests_properties(lsp_catalog PROPERTIES TIMEOUT 30)
 add_test(NAME lsp_edits COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_lsp_edits.py $<TARGET_FILE:skrumi-lsp>)
 add_test(NAME cli_tools COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_cli_tools.py $<TARGET_FILE:skrumi>)
+add_test(NAME game_update_cli COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_game_update.py $<TARGET_FILE:skrumi>)
+set_tests_properties(game_update_cli PROPERTIES TIMEOUT 90)
 # Short programs with their exact output, errors and exit codes (test_programs.json).
 add_test(NAME programs COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_programs.py $<TARGET_FILE:skrumi>)
 set_tests_properties(programs PROPERTIES TIMEOUT 300 ENVIRONMENT "SKRUMI_HOME=${CMAKE_SOURCE_DIR}")
@@ -77,7 +94,7 @@ add_test(NAME site_facts COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/packa
 add_test(NAME examples_raycaster_copy COMMAND ${CMAKE_COMMAND} -E compare_files
          ${CMAKE_SOURCE_DIR}/examples/raycaster.skm ${CMAKE_SOURCE_DIR}/site/playground/examples/raycaster.skm)
 add_test(NAME examples_raycaster_check COMMAND skrumi check ${CMAKE_SOURCE_DIR}/examples/raycaster.skm)
-set_tests_properties(examples_raycaster_check PROPERTIES PASS_REGULAR_EXPRESSION "no problems found"
+set_tests_properties(examples_raycaster_check PROPERTIES PASS_REGULAR_EXPRESSION "no (problems|errors) found"
                      ENVIRONMENT "SKRUMI_HOME=${CMAKE_SOURCE_DIR}")
 add_test(NAME release_asset_inventory COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_release_assets.py)
 add_test(NAME packaging_versions COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_versions.py ${CMAKE_SOURCE_DIR})
@@ -150,6 +167,10 @@ endforeach()
 
 # Comprehensive regression tests
 set(REGRESSION_TESTS
+    test_canvas
+    test_game_helpers
+    test_game_language
+    test_graphemes
     test_syntax_types
     test_expressions
     test_variables_scope
@@ -237,7 +258,7 @@ foreach(SOURCE ${SKRUMI_CHECKED_SOURCES})
     get_filename_component(SOURCE_DIR ${SOURCE} DIRECTORY)
     get_filename_component(SOURCE_GROUP ${SOURCE_DIR} NAME)
     add_test(NAME check_${SOURCE_GROUP}_${SOURCE_NAME} COMMAND skrumi check ${SOURCE})
-    set_tests_properties(check_${SOURCE_GROUP}_${SOURCE_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "no problems found")
+    set_tests_properties(check_${SOURCE_GROUP}_${SOURCE_NAME} PROPERTIES PASS_REGULAR_EXPRESSION "no (problems|errors) found")
 endforeach()
 
 # Every Skrumi code block in the documentation passes `skrumi check`, and every
@@ -266,7 +287,7 @@ set_tests_properties(persistent_environment PROPERTIES TIMEOUT 60)
 add_test(NAME installer_transactions COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_transactions.py $<TARGET_FILE:skrumi>)
 set_tests_properties(installer_transactions PROPERTIES TIMEOUT 180 LABELS standalone)
 add_test(NAME check_installer COMMAND skrumi check ${CMAKE_SOURCE_DIR}/installer/main.skm)
-set_tests_properties(check_installer PROPERTIES PASS_REGULAR_EXPRESSION "no problems found")
+set_tests_properties(check_installer PROPERTIES PASS_REGULAR_EXPRESSION "no (problems|errors) found")
 add_test(NAME installer_gui COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/installer/test_gui.py $<TARGET_FILE:skrumi> $<TARGET_FILE:skrumi-lsp>)
 set_tests_properties(installer_gui PROPERTIES TIMEOUT 180 LABELS standalone SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
 add_test(NAME checked_archives COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_archives.py $<TARGET_FILE:skrumi>)

@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory(prefix="skrumi-docs-test-") as directory:
     env = dict(os.environ, SKRUMI_HOME=str(Path(directory) / "absent"))
     for document in documents:
         text = document.read_text(encoding="utf-8")
-        for match in re.finditer(r"```cpp\n(.*?)```", text, re.S):
+        for match in re.finditer(r"```(?:cpp|skrumi)\n(.*?)```", text, re.S):
             code = match.group(1)
             if "#include" in code:
                 continue
@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix="skrumi-docs-test-") as directory:
                 executed += 1
                 if actual.returncode != 0:
                     failures.append(f"{document.relative_to(root)}:{line} runtime contract failed\n{actual.stdout}{actual.stderr}")
-            if result.returncode != 0 or "no problems found" not in result.stdout:
+            if result.returncode != 0 or not any(message in result.stdout for message in ("no problems found", "no errors found")):
                 failures.append(f"{document.relative_to(root)}:{line}\n{code}\n{result.stdout}{result.stderr}")
 
 reference = (root / "DOCUMENTATION.md").read_text(encoding="utf-8")

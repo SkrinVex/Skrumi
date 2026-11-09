@@ -1,0 +1,18 @@
+using graphics;
+int canvas = create_canvas(16, 16);
+draw_to_canvas(canvas);
+clear_window(0);
+draw_polygon([0, 0, 8, 0, 8, 8, 0, 8], 0xFF0000);
+draw_circle_alpha(12, 12, 2, 0x00FF00, 128);
+int snapshot = decode_image(canvas_png(canvas));
+assert_equal(image_pixel(snapshot, 2, 2), 0xFF0000);
+assert_equal(image_pixel(snapshot, 12, 12), 0x008000);
+int copy = create_canvas(16, 16);
+draw_to_canvas(copy);
+draw_canvas(canvas, 0, 0);
+free_canvas(canvas);
+int cloned = decode_image(canvas_png(copy));
+assert_equal(image_pixel(cloned, 2, 2), 0xFF0000);
+free_canvas(copy);
+free_image(snapshot);
+free_image(cloned);

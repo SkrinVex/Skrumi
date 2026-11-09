@@ -101,6 +101,9 @@ enum class Op : std::uint8_t {
     // AddInt and SubInt with an int literal on the right: R[a] = R[b] + c, R[b] - c,
     // the int itself in c. CompareIntK is CompareInt with the int itself in b.
     AddIntK, SubIntK, CompareIntK,
+    Bitwise,       // binary bit operation x, registers a = b op c
+    BitNot,        // a = ~b
+
 };
 
 struct Instr {
@@ -161,6 +164,7 @@ struct SetPath {
     int capture = -1;     // the lambda's captured variable, or
     int global = -1;      // its global site
     std::string variable;
+    bool postfix = false;
     std::vector<Step> steps; // from the variable outwards
     std::string op;          // "=", or the operator of a compound assignment: "+"
     runtime::Operator kind = runtime::Operator::Unknown;

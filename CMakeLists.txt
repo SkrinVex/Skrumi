@@ -46,6 +46,7 @@ endif()
 
 # Reusable Skrumi core library
 set(skrumi_core_sources
+    src/audio/Mixer.cpp
     src/core/Context.cpp
     src/core/Platform.cpp
     src/core/Network.cpp
@@ -53,6 +54,7 @@ set(skrumi_core_sources
     src/core/TlsServer.cpp
     src/core/Runtime.cpp
     src/core/SourceProvider.cpp
+    src/core/Unicode.cpp
     src/core/Lexer.cpp
     src/core/Parser.cpp
     src/core/AST.cpp
@@ -86,6 +88,7 @@ set(skrumi_core_sources
     src/graphics/Ui.cpp
     src/graphics/Image.cpp
     src/graphics/Builtins.cpp
+    src/graphics/Rendering.cpp
 )
 if(EMSCRIPTEN)
     # The browser playground: no libcurl or Mbed TLS, so no HTTP client or HTTPS server.
@@ -103,6 +106,8 @@ target_include_directories(skrumi_core PUBLIC
 target_include_directories(skrumi_core PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_compile_definitions(skrumi_core PRIVATE SKRUMI_VERSION="${PROJECT_VERSION}")
 include(cmake/Fonts.cmake)
+include(cmake/Unicode.cmake)
+include(cmake/Audio.cmake)
 if(EMSCRIPTEN)
     # WebAssembly for the playground page (site/playground): the page loads
     # skrumi.js/skrumi.wasm into a web worker. Nothing else is built.
@@ -121,7 +126,7 @@ if(EMSCRIPTEN)
     # Asyncify cannot unwind through WebAssembly exceptions, so this build's core
     # uses Emscripten's JavaScript ones.
     add_library(skrumi_core_graphics STATIC ${skrumi_core_sources})
-    target_link_libraries(skrumi_core_graphics PRIVATE freetype)
+    target_link_libraries(skrumi_core_graphics PRIVATE freetype utf8proc skrumi_audio)
     target_include_directories(skrumi_core_graphics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
                                PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
     target_compile_definitions(skrumi_core_graphics PRIVATE SKRUMI_VERSION="${PROJECT_VERSION}")
@@ -183,7 +188,7 @@ if(WIN32)
     target_link_libraries(skrumi_debug PUBLIC ws2_32)
 endif()
 
-add_executable(skrumi src/cli/main.cpp src/cli/Launch.cpp src/cli/Help.cpp src/cli/Tools.cpp src/standalone/Stub.cpp)
+add_executable(skrumi src/cli/main.cpp src/cli/Launch.cpp src/cli/Help.cpp src/cli/Tools.cpp src/cli/ProjectTools.cpp src/standalone/Stub.cpp)
 target_link_libraries(skrumi PRIVATE skrumi_bundle skrumi_debug)
 if(WIN32)
     # CommandLineToArgvW: program arguments as UTF-16, converted to UTF-8 for os_args().
@@ -194,6 +199,17 @@ if(MINGW)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_link_options(skrumi PRIVATE -static-libgcc -static-libstdc++)
 endif()
+
+# The project manifest uses a complete TOML parser, shared with no runtime state.
+FetchContent_Declare(tomlplusplus
+    URL https://github.com/marzer/tomlplusplus/archive/refs/tags/v3.4.0.tar.gz
+    URL_HASH SHA256=8517f65938a4faae9ccf8ebb36631a38c1cadfb5efa85d9a72e15b9e97d25155)
+FetchContent_MakeAvailable(tomlplusplus)
+target_link_libraries(skrumi PRIVATE tomlplusplus::tomlplusplus)
+target_include_directories(skrumi PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(READ "${tomlplusplus_SOURCE_DIR}/LICENSE" toml_license)
+file(CONFIGURE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/generated/ProjectLicenses.h" CONTENT
+    "#pragma once\ninline const char* projectLicenses() { return R\"SKTOML(toml++ 3.4.0\n${toml_license})SKTOML\"; }\n" @ONLY)
 
 # Skrumi Language Server executable (LSP)
 add_executable(skrumi-lsp

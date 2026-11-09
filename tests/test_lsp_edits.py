@@ -157,6 +157,17 @@ with tempfile.TemporaryDirectory(prefix='skrumi-lsp-') as directory:
                                                         'position': {'line': 1, 'character': 16}})['result']
     assert [item['label'] for item in listed] == ['Red', 'Green'], listed
 
+    shadow = 'float measure(float size) { return size; }\n'
+    shadow_uri = uri(root / 'shadow.skm')
+    server.notify('textDocument/didOpen', {'textDocument': {'uri': shadow_uri, 'languageId': 'skrumi', 'version': 1, 'text': shadow}})
+    pos = at(shadow, 'size')
+    actions = server.request('textDocument/codeAction', {'textDocument': {'uri': shadow_uri},
+        'range': {'start': pos, 'end': pos}, 'context': {'diagnostics': []}})['result']
+    assert len(actions) == 1, actions
+    assert actions[0]['diagnostics'][0]['code'] == 'SKR2001', actions
+    edits = actions[0]['edit']['changes'][shadow_uri]
+    assert len(edits) == 2 and all(e['newText'] == 'size_local' for e in edits), edits
+
     server.request('shutdown', None)
     server.notify('exit', None)
     server.process.wait(timeout=10)

@@ -1,8 +1,10 @@
 //! Android использует MediaPlayer.
 //! Звук: файлы WAV и тоны, которые играют, не останавливая программу. В Windows звук
-//! идёт через системный PlaySound, в Linux — через проигрыватель рабочего стола
+//! смешивается встроенным микшером, в Linux — через проигрыватель рабочего стола
 //! (pw-play, paplay или aplay; свой можно указать переменной SKRUMI_SOUND_PLAYER).
 //! Функции возвращают `false`, если звук запустить не удалось, и не прерывают программу.
+//! play_sound_ex использует единый микшер Windows/Linux/Android с каналами,
+//! потоковым декодированием и handles; ошибки сообщает исключением Audio Error.
 
 /// Начинает проигрывать файл WAV (в Linux — и другие форматы, которые понимает проигрыватель).
 ///
@@ -23,3 +25,18 @@ bool beep(float frequency, int milliseconds) { return sound_tone(frequency, mill
 
 /// Останавливает все звуки программы.
 void stop_sounds() { sound_stop(); }
+
+// Native mixer: Windows/Linux/Android. Browser reports Audio Error.
+const int SFX = 0;
+const int MUSIC = 1;
+const int UI = 2;
+int play_sound_ex(string path, int channel, float volume, bool loop) { return sound_play_ex(path, channel, volume, loop); }
+void stop_sound(int handle) { sound_stop_handle(handle); }
+void pause_sound(int handle) { sound_pause(handle, true); }
+void resume_sound(int handle) { sound_pause(handle, false); }
+bool sound_playing(int handle) { return sound_is_playing(handle); }
+void set_sound_volume(int handle, float volume) { sound_volume(handle, volume); }
+void set_sound_pan(int handle, float pan) { sound_pan(handle, pan); }
+void set_master_volume(float volume) { sound_master_volume(volume); }
+void set_channel_volume(int channel, float volume) { sound_channel_volume(channel, volume); }
+void fade_out(int handle, int milliseconds) { sound_fade_out(handle, milliseconds); }

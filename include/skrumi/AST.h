@@ -266,6 +266,13 @@ struct BinOpNode : Node {
     runtime::Operator kind;
 };
 
+// Only the selected branch is evaluated.
+struct ConditionalNode : Node {
+    std::unique_ptr<Node> condition, yes, no;
+    ConditionalNode(std::unique_ptr<Node> c, std::unique_ptr<Node> y, std::unique_ptr<Node> n)
+        : condition(std::move(c)), yes(std::move(y)), no(std::move(n)) {}
+};
+
 // Unary minus and logical not.
 struct UnaryOpNode : Node {
     std::string op;
@@ -279,6 +286,12 @@ struct PostIncNode : Node {
     int delta;
     VarRef ref;
     explicit PostIncNode(std::string n, int d = 1) : name(std::move(n)), delta(d) {}
+};
+
+struct PathIncNode : Node {
+    std::unique_ptr<Node> target;
+    int delta;
+    PathIncNode(std::unique_ptr<Node> t, int d) : target(std::move(t)), delta(d) {}
 };
 
 // array name = expression;   array name;

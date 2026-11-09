@@ -285,10 +285,13 @@ SKRUMI_APART void setPath(Proto& proto, const SetPath& path, Value* R, Value& as
         at = step.field ? &runtime::member(*at, step.name, last && create, last ? &declared : nullptr)
                         : &runtime::element(*at, R[step.key], last && create);
     }
+    if (path.postfix && !at->isInt() && !at->isFloat())
+        throw std::runtime_error("Type Error: postfix ++/-- requires int or float");
     Value value = create ? assigned : runtime::binary(path.kind, path.op, *at, assigned);
     // A struct field keeps its declared type; elements and map values take any value.
     if (declared) runtime::coerce(*declared, value, "field '" + path.steps.back().name + "'");
     else if (owner && owner->elementType) runtime::storeElement(*owner, value); // array<int>, map<string,int>
+    if (path.postfix) assigned = *at;
     *at = std::move(value);
 }
 
@@ -1002,6 +1005,8 @@ Value execute(Proto& entry, Value* R, Context& root, Context& entryScope, DebugF
         &&L_AddIntK,
         &&L_SubIntK,
         &&L_CompareIntK,
+        &&L_Bitwise,
+        &&L_BitNot,
     };
 #endif
 
@@ -1136,6 +1141,12 @@ Value execute(Proto& entry, Value* R, Context& root, Context& entryScope, DebugF
                     OP(Negate):
                     OP(Not):
                         unary(in->op, R[in->a], R[in->b]);
+                        NEXT;
+                    OP(Bitwise):
+                        R[in->a] = runtime::binary(static_cast<runtime::Operator>(in->x), P->texts[in->y], R[in->b], R[in->c]);
+                        NEXT;
+                    OP(BitNot):
+                        R[in->a] = runtime::binary(runtime::Operator::BitXor, "~", R[in->b], Value::integer(-1));
                         NEXT;
                     OP(Truth):
                         runtime::operandTruth(R[in->a], in->x ? "right" : "left", P->texts[in->y]);

@@ -1,6 +1,7 @@
 // String and JSON builtins. Positions and lengths count characters (code points),
 // never UTF-8 bytes, so Cyrillic and emoji behave like Latin text.
 #include "Builtin.h"
+#include "skrumi/Unicode.h"
 #include "../Operations.h"
 #include "../HttpServer.h"
 #include <algorithm>
@@ -163,6 +164,22 @@ std::string toJson(const Value& value) {
 void addTextBuiltins(std::vector<Builtin>& out) {
     auto add = [&](BuiltinSpec spec, Handler handler) { out.push_back({std::move(spec), handler}); };
 
+    add({"byte_size", "int", {{"string", "text"}}, 1, false, "string", "Размер строки в байтах UTF-8 (как size для строки)."},
+        [](Call& c) { return integer(static_cast<long long>(c.text(0).size())); });
+    add({"char_length", "int", {{"string", "text"}}, 1, false, "string", "Число кодовых точек Unicode, синоним str_length; не графемы."},
+        [](Call& c) { return integer(static_cast<long long>(characterCount(c.text(0)))); });
+    add({"grapheme_length", "int", {{"string", "text"}}, 1, false, "string", "Число расширенных графемных кластеров, Unicode 16 UAX #29."},
+        [](Call& c) { return integer(static_cast<long long>(unicode::graphemeBoundaries(c.text(0)).size() - 1)); });
+    add({"grapheme_split", "array", {{"string", "text"}}, 1, false, "string", "Разбивает строку по графемам, сохраняя ZWJ, флаги и комбинируемые знаки."},
+        [](Call& c) { ValueList parts; for (auto& part : unicode::graphemes(c.text(0))) parts.push_back(text(std::move(part))); return makeArray(std::move(parts)); });
+    add({"grapheme_substring", "string", {{"string", "text"}, {"int", "start"}, {"int", "length"}}, 2, false, "string", "Подстрока по графемам; неотрицательные start/length, без length — до конца, границы ограничиваются длиной."},
+        [](Call& c) {
+            auto boundaries = unicode::graphemeBoundaries(c.text(0));
+            size_t count = boundaries.size() - 1;
+            size_t start = std::min(c.amount(1, maxText), count);
+            size_t end = c.has(2) ? start + std::min(c.amount(2, maxText), count - start) : count;
+            return text(c.text(0).substr(boundaries[start], boundaries[end] - boundaries[start]));
+        });
     add({"str_length", "int", {{"string", "text"}}, 1, false, "string",
          "Число символов строки. `size(text)` для строки считает байты UTF-8.\n\n"
          "```skrumi\nint n = str_length(\"Лисий\"); // 5, а size() даст 10\n```"},

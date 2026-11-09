@@ -64,6 +64,7 @@ struct LspDiagnostic {
     int severity = 1; // 1 = Error, 2 = Warning, 3 = Info, 4 = Hint
     std::string message;
     std::string source = "skrumi";
+    int code = 0;
 
     JsonValue toJson() const {
         std::map<std::string, JsonValue> obj;
@@ -71,6 +72,7 @@ struct LspDiagnostic {
         obj["severity"] = severity;
         obj["message"] = message;
         obj["source"] = source;
+        if (code != 0) obj["code"] = "SKR" + std::to_string(code);
         return JsonValue(obj);
     }
 
@@ -80,6 +82,7 @@ struct LspDiagnostic {
         ld.severity = static_cast<int>(d.severity);
         ld.message = d.message;
         ld.source = d.source;
+        ld.code = d.code;
         return ld;
     }
 };

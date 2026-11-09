@@ -1,6 +1,8 @@
 #include "Font.h"
 #include "Graphics.h"
 #include "FontLicenses.h"
+#include "UnicodeLicenses.h"
+#include "../audio/Mixer.h"
 #include <algorithm>
 #include <map>
 #include <stdexcept>
@@ -65,27 +67,50 @@ Font::Font(std::string bytes) : state_(std::make_unique<State>()) {
     if (!FT_IS_SCALABLE(state_->face)) throw std::runtime_error("Graphics Error: scalable outline font required");
     checked(FT_Select_Charmap(state_->face, FT_ENCODING_UNICODE));
 }
+Font::Font(std::vector<std::shared_ptr<Font>> fallback) {
+    for (auto& face : fallback) {
+        auto append = [&](const std::shared_ptr<Font>& font) {
+            if (std::find(fallback_.begin(), fallback_.end(), font) == fallback_.end()) fallback_.push_back(font);
+        };
+        if (face->state_) append(face);
+        else for (auto& font : face->fallback_) append(font);
+    }
+    if (fallback_.empty() || fallback_.size() > 32) throw std::runtime_error("Graphics Error: fallback chain must contain 1..32 faces");
+}
 Font::~Font() = default;
+bool Font::supports(char32_t cp) const {
+    if (cp == U'\n') return true;
+    if (state_) return FT_Get_Char_Index(state_->face, cp) != 0;
+    for (auto& font : fallback_) if (font->supports(cp)) return true;
+    return false;
+}
+Font& Font::select(char32_t cp) {
+    if (state_) return *this;
+    for (auto& font : fallback_) if (font->supports(cp)) return font->select(cp);
+    return fallback_.front()->select(cp);
+}
 int Font::width(const std::string& text, int pixels) {
     pixelSize(pixels);
     int current = 0, widest = 0;
     for (size_t cursor = 0; cursor < text.size();) {
         auto ch = codepoint(text, cursor);
         if (ch == '\n') { widest = std::max(widest, current); current = 0; continue; }
-        current += state_->glyph(ch, pixels).advance;
+        current += select(ch).state_->glyph(ch, pixels).advance;
         if (current > 10000000) throw std::runtime_error("Graphics Error: text extent is too large");
     }
     return std::max(current, widest);
 }
-void Font::draw(Surface& surface, int x, int y, const std::string& text, int pixels, uint32_t color) {
+void Font::draw(Surface& surface, int x, int y, const std::string& text, int pixels, uint32_t color, int opacity) {
+    if (opacity < 0 || opacity > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
     pixelSize(pixels);
-    checked(FT_Set_Pixel_Sizes(state_->face, 0, pixels));
-    int ascender = static_cast<int>((state_->face->size->metrics.ascender + 63) / 64);
+    auto& primary = select(U' ').state_;
+    checked(FT_Set_Pixel_Sizes(primary->face, 0, pixels));
+    int ascender = static_cast<int>((primary->face->size->metrics.ascender + 63) / 64);
     int64_t left = x, top = y;
     for (size_t cursor = 0; cursor < text.size();) {
         auto ch = codepoint(text, cursor);
         if (ch == '\n') { left = x; top += pixels + 4; continue; }
-        const auto& glyph = state_->glyph(ch, pixels);
+        const auto& glyph = select(ch).state_->glyph(ch, pixels);
         const auto area = surface.clip();
         auto gx = left + glyph.left, gy = top + ascender - glyph.top;
         if (gx < area.right && gy < area.bottom && gx + glyph.image.width > area.left && gy + glyph.image.height > area.top) {
@@ -93,14 +118,22 @@ void Font::draw(Surface& surface, int x, int y, const std::string& text, int pix
             for (int row = 0; row < glyph.image.height; ++row) for (int col = 0; col < glyph.image.width; ++col) {
                 int alpha = static_cast<int>(glyph.image.pixels[static_cast<size_t>(row) * glyph.image.width + col] >> 24);
                 if (alpha && gx+col >= area.left && gx+col < area.right && gy+row >= area.top && gy+row < area.bottom)
-                    surface.blend(static_cast<int>(gx+col), static_cast<int>(gy+row), 1, 1, color, alpha);
+                    surface.blend(static_cast<int>(gx+col), static_cast<int>(gy+row), 1, 1, color, (alpha * opacity + 127) / 255);
             }
         }
         left += glyph.advance;
     }
 }
-int Fonts::load(const std::string& bytes) {
-    auto face = std::make_unique<Font>(bytes);
+int Fonts::load(const std::string& bytes) { return add(std::make_shared<Font>(bytes)); }
+int Fonts::withFallback(int body, int fallback) {
+    get(body); get(fallback);
+    std::vector<std::shared_ptr<Font>> chain;
+    // A composite is immutable; new handles only refer to existing faces, so cycles
+    // are impossible. Keep a bounded depth through the global 32-handle limit.
+    chain.push_back(faces_[body - 1]); chain.push_back(faces_[fallback - 1]);
+    return add(std::make_shared<Font>(std::move(chain)));
+}
+int Fonts::add(std::shared_ptr<Font> face) {
     for (size_t i = 0; i < faces_.size(); ++i) if (!faces_[i]) { faces_[i] = std::move(face); return static_cast<int>(i+1); }
     if (faces_.size() >= 32) throw std::runtime_error("Graphics Error: font handle limit");
     faces_.push_back(std::move(face)); return static_cast<int>(faces_.size());
@@ -110,5 +143,5 @@ Font& Fonts::get(int handle) {
     return *faces_[handle-1];
 }
 void Fonts::release(int handle) { get(handle); faces_[handle-1].reset(); }
-const char* fontLicense() { return skrumiFontLicense(); }
+const char* fontLicense() { static const std::string licenses = std::string(skrumiFontLicense()) + "\n" + skrumiUnicodeLicense() + "\n" + audio::licenses(); return licenses.c_str(); }
 }

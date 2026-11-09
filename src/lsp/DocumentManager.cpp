@@ -153,10 +153,12 @@ void DocumentManager::analyze(DocumentState& doc) {
     Lexer lexer(doc.text, true);
     auto tokens = lexer.tokenize();
     std::vector<Diagnostic> allDiags = lexer.getDiagnostics();
+    for (auto& d : allDiags) if (d.code == 0) d.code = 1000;
 
     Parser parser(std::move(tokens), canonicalPath(filePath));
     std::vector<Diagnostic> parserDiags;
     auto program = parser.parseProgramWithDiagnostics(parserDiags);
+    for (auto& d : parserDiags) if (d.code == 0) d.code = 1001;
     allDiags.insert(allDiags.end(), parserDiags.begin(), parserDiags.end());
 
     // Semantic analysis never executes code.
@@ -168,10 +170,15 @@ void DocumentManager::analyze(DocumentState& doc) {
     }
     doc.analyzer->analyze(program.get());
     const auto& semDiags = doc.analyzer->getDiagnostics();
-    allDiags.insert(allDiags.end(), semDiags.begin(), semDiags.end());
+    // Keep the partial symbol index for completion, but do not cascade semantic
+    // errors from declarations that the parser could not reconstruct.
+    if (allDiags.empty()) allDiags.insert(allDiags.end(), semDiags.begin(), semDiags.end());
 
     doc.diagnostics.clear();
-    for (const auto& d : allDiags) doc.diagnostics.push_back(LspDiagnostic::fromDiagnostic(d));
+    for (const auto& d : allDiags) {
+        if (doc.diagnostics.size() == 10) break;
+        doc.diagnostics.push_back(LspDiagnostic::fromDiagnostic(d));
+    }
 }
 
 } // namespace lsp

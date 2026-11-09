@@ -71,6 +71,10 @@ const Context& Interpreter::getContext() const {
 
 void Interpreter::reset() {
     globalContext.graphics.reset();
+    globalContext.fonts.reset();
+    globalContext.canvases.reset();
+    globalContext.mixer.reset();
+    globalContext.randomEngine.reset();
     globalContext.server.reset();
     globalContext.variables.clear();
     globalContext.nullableGlobals.clear();

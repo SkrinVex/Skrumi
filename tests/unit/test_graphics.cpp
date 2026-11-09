@@ -102,6 +102,18 @@ int main() {
     bool unbalanced = false;
     try { pixels.popClip(); } catch (const std::runtime_error&) { unbalanced = true; }
     CHECK(unbalanced);
+    // Every alpha primitive agrees on source-over, including clipping and alpha 0.
+    pixels.clear(0);
+    pixels.circle(16, 12, 3, 0xff0000, 128);
+    CHECK(pixels.pixels()[12 * 32 + 16] == 0x800000);
+    pixels.line(0, 0, 31, 0, 0x00ff00, 128);
+    CHECK(pixels.pixels()[0] == 0x008000);
+    pixels.ring(16, 12, 5, 1, 0x0000ff, 128);
+    CHECK(pixels.pixels()[12 * 32 + 21] == 0x000080);
+    before = pixels.pixels();
+    pixels.text(0, 0, "transparent", 2, 0xffffff, 0);
+    CHECK(before == pixels.pixels());
+    CHECK(Surface::hasGlyph(U'★') && Surface::hasGlyph(U'•') && !Surface::hasGlyph(U'🦊'));
     // Pictures: stretched by nearest pixel, their alpha and the opacity mixed in, clipped
     {
         skrumi::graphics::Image picture;

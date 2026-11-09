@@ -35,7 +35,8 @@ const std::unordered_map<char32_t, Glyph>& lowercase() {
     return letters;
 }
 
-Glyph glyph(char32_t code) {
+Glyph glyph(char32_t code, bool* supported = nullptr) {
+    if (supported) *supported = true;
     static const std::u32string lookalikes = U"аеорсух";
     static const std::u32string latinLower = U"aeopcyx";
     auto same = lookalikes.find(code);
@@ -73,6 +74,9 @@ Glyph glyph(char32_t code) {
         {U'=',{0,0,31,0,31,0,0}}, {U'(',{2,4,8,8,8,4,2}},
         {U')',{8,4,2,2,2,4,8}}, {U'[',{14,8,8,8,8,8,14}},
         {U']',{14,2,2,2,2,2,14}}, {U'_', {0,0,0,0,0,0,31}},
+        {U'•',{0,0,4,14,4,0,0}}, {U'★',{4,4,31,14,14,17,0}},
+        {U'⚡',{2,6,12,31,6,12,8}}, {U'❤',{0,10,31,31,14,4,0}},
+        {U'☠',{14,21,31,14,0,10,21}}, {U'⬆',{4,14,31,4,4,4,0}}, {U'⬇',{0,4,4,4,31,14,4}},
         {U'♥',{0,10,31,31,14,4,0}}, {U'←',{0,4,8,31,8,4,0}},
         {U'→',{0,4,2,31,2,4,0}}, {U'Б',{31,16,16,30,17,17,30}},
         {U'Г',{31,16,16,16,16,16,16}}, {U'Д',{7,9,9,9,17,31,17}},
@@ -101,6 +105,7 @@ Glyph glyph(char32_t code) {
     auto equivalent = russian.find(code);
     if (equivalent != std::u32string::npos) code = latin[equivalent];
     auto found = letters.find(code);
+    if (supported) *supported = found != letters.end();
     return found == letters.end() ? letters.at(U'?') : found->second;
 }
 char32_t nextCode(const std::string& text, size_t& i) {
@@ -119,6 +124,13 @@ char32_t nextCode(const std::string& text, size_t& i) {
         (count == 1 && code < 128) || (count == 2 && code < 2048) || (count == 3 && code < 65536)) return U'?';
     return code;
 }
+}
+
+bool Surface::hasGlyph(char32_t cp) {
+    if (cp == U'\n') return true;
+    bool supported = false;
+    glyph(cp, &supported);
+    return supported;
 }
 
 Surface::Surface(int width, int height) : width_(width), height_(height) {
@@ -159,19 +171,22 @@ void Surface::rectangle(int x, int y, int width, int height, uint32_t color) {
     for (int row = top; row < bottom; ++row)
         std::fill(pixels_.begin() + size_t(row) * width_ + left, pixels_.begin() + size_t(row) * width_ + right, color & 0xffffff);
 }
-void Surface::circle(int x, int y, int radius, uint32_t color) {
+void Surface::circle(int x, int y, int radius, uint32_t color, int alpha) {
+    if (alpha < 0 || alpha > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
     if (radius < 0 || radius > 8192) throw std::runtime_error("Graphics Error: radius must be 0..8192");
     int64_t top = std::max<int64_t>(0, int64_t(y) - radius), bottom = std::min<int64_t>(height_ - 1, int64_t(y) + radius);
     for (int64_t row = top; row <= bottom; ++row) {
         int64_t dy = row - y;
         int64_t dx = static_cast<int64_t>(std::sqrt(double(int64_t(radius) * radius - dy * dy)));
         int64_t left = std::max<int64_t>(0, int64_t(x) - dx), right = std::min<int64_t>(width_ - 1, int64_t(x) + dx);
-        if (left <= right) rectangle(static_cast<int>(left), static_cast<int>(row), static_cast<int>(right - left + 1), 1, color);
+        if (left <= right) blend(static_cast<int>(left), static_cast<int>(row), static_cast<int>(right - left + 1), 1, color, alpha);
     }
 }
 void Surface::blend(int x, int y, int width, int height, uint32_t color, int alpha) {
     if (width < 0 || height < 0) throw std::runtime_error("Graphics Error: rectangle size must not be negative");
     if (alpha < 0 || alpha > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
+    if (alpha == 0) return;
+    if (alpha == 255) { rectangle(x, y, width, height, color); return; }
     Clip area = clip();
     int left = std::max(area.left, x), top = std::max(area.top, y);
     int right = static_cast<int>(std::min<int64_t>(area.right, int64_t(x) + width));
@@ -186,7 +201,8 @@ void Surface::blend(int x, int y, int width, int height, uint32_t color, int alp
             pixel = mix(pixel, 16) | mix(pixel, 8) | mix(pixel, 0);
         }
 }
-void Surface::line(int x1, int y1, int x2, int y2, uint32_t color) {
+void Surface::line(int x1, int y1, int x2, int y2, uint32_t color, int alpha) {
+    if (alpha < 0 || alpha > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
     // Bresenham; points outside the surface are skipped, the line is not shortened.
     int64_t dx = std::llabs(int64_t(x2) - x1), dy = -std::llabs(int64_t(y2) - y1);
     int64_t sx = x1 < x2 ? 1 : -1, sy = y1 < y2 ? 1 : -1, error = dx + dy;
@@ -194,7 +210,7 @@ void Surface::line(int x1, int y1, int x2, int y2, uint32_t color) {
     Clip area = clip();
     if (dx > 20000 || -dy > 20000) throw std::runtime_error("Graphics Error: line is longer than 20000 pixels");
     for (;;) {
-        if (x >= area.left && y >= area.top && x < area.right && y < area.bottom) pixels_[size_t(y) * width_ + size_t(x)] = color & 0xffffff;
+        if (x >= area.left && y >= area.top && x < area.right && y < area.bottom) blend(static_cast<int>(x), static_cast<int>(y), 1, 1, color, alpha);
         if (x == x2 && y == y2) break;
         int64_t twice = 2 * error;
         if (twice >= dy) { error += dy; x += sx; }
@@ -210,7 +226,8 @@ void Surface::frame(int x, int y, int width, int height, int thickness, uint32_t
     rectangle(x, y, std::min(t, width), height, color);
     rectangle(static_cast<int>(std::max<int64_t>(x, int64_t(x) + width - t)), y, std::min(t, width), height, color);
 }
-void Surface::ring(int x, int y, int radius, int thickness, uint32_t color) {
+void Surface::ring(int x, int y, int radius, int thickness, uint32_t color, int alpha) {
+    if (alpha < 0 || alpha > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
     if (radius < 0 || radius > 8192) throw std::runtime_error("Graphics Error: radius must be 0..8192");
     if (thickness < 1) throw std::runtime_error("Graphics Error: ring thickness must be at least 1");
     int64_t outer = int64_t(radius) * radius, innerRadius = std::max<int64_t>(0, int64_t(radius) - thickness);
@@ -221,7 +238,7 @@ void Surface::ring(int x, int y, int radius, int thickness, uint32_t color) {
     for (int64_t row = top; row <= bottom; ++row)
         for (int64_t col = left; col <= right; ++col) {
             int64_t d = (col - x) * (col - x) + (row - y) * (row - y);
-            if (d <= outer && (d > inner || thickness > radius)) pixels_[size_t(row) * width_ + size_t(col)] = color & 0xffffff;
+            if (d <= outer && (d > inner || thickness > radius)) blend(static_cast<int>(col), static_cast<int>(row), 1, 1, color, alpha);
         }
 }
 void Surface::image(const Image& picture, int sx, int sy, int sw, int sh, int x, int y, int width, int height, int opacity) {
@@ -273,7 +290,8 @@ int Surface::textWidth(const std::string& value, int scale) {
     }
     return static_cast<int>(std::min<int64_t>(widest, 1 << 30));
 }
-void Surface::text(int x, int y, const std::string& value, int scale, uint32_t color) {
+void Surface::text(int x, int y, const std::string& value, int scale, uint32_t color, int alpha) {
+    if (alpha < 0 || alpha > 255) throw std::runtime_error("Graphics Error: alpha must be 0..255");
     if (scale < 1 || scale > 32) throw std::runtime_error("Graphics Error: text scale must be 1..32");
     if (value.size() > 65536) throw std::runtime_error("Graphics Error: text exceeds 65536 bytes");
     int64_t cursorX = x, cursorY = y;
@@ -284,7 +302,7 @@ void Surface::text(int x, int y, const std::string& value, int scale, uint32_t c
             auto bitmap = glyph(code);
             for (int row = 0; row < 9; ++row)
                 for (int col = 0; col < 5; ++col)
-                    if (bitmap[row] & (1 << (4 - col))) rectangle(static_cast<int>(cursorX) + col * scale, static_cast<int>(cursorY) + row * scale, scale, scale, color);
+                    if (bitmap[row] & (1 << (4 - col))) blend(static_cast<int>(cursorX) + col * scale, static_cast<int>(cursorY) + row * scale, scale, scale, color, alpha);
         }
         cursorX += 6 * scale;
     }

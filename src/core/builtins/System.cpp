@@ -142,6 +142,8 @@ void addSystemBuiltins(std::vector<Builtin>& out) {
                 std::chrono::system_clock::now().time_since_epoch()).count();
             return real(static_cast<double>(now));
         });
+    add({"clock_ms64", "float", {}, 0, false, "time", "Монотонные миллисекунды как float; целые миллисекунды точны до 2^53, без 24-дневного переполнения int."},
+        [](Call&) { return real(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count()); });
     add({"clock_ms", "int", {}, 0, false, "time",
          "Миллисекунды с запуска программы по монотонным часам. Подходит для замера длительности: "
          "не зависит от перевода системных часов."},
@@ -202,6 +204,30 @@ void addSystemBuiltins(std::vector<Builtin>& out) {
 #else
             return text("other");
 #endif
+        });
+    add({"user_data_dir", "string", {}, 0, false, "os", "Каталог сохранений Skrumi: LOCALAPPDATA/Skrumi, XDG_DATA_HOME/skrumi (или ~/.local/share/skrumi), Android app files. Создаётся при обращении; Web — ошибка."},
+        [](Call&) {
+            std::string base;
+#ifdef __ANDROID__
+            base = android::host().directory();
+#elif defined(__EMSCRIPTEN__)
+            throw std::runtime_error("File Error: persistent user data directory is unavailable in the browser");
+#elif defined(_WIN32)
+            base = platform::getEnvVar("LOCALAPPDATA");
+            if (base.empty()) throw std::runtime_error("File Error: LOCALAPPDATA is not configured");
+            base += "/Skrumi";
+#else
+            base = platform::getEnvVar("XDG_DATA_HOME");
+            if (base.empty() || !pathOf(base).is_absolute()) {
+                base = platform::getEnvVar("HOME");
+                if (base.empty()) throw std::runtime_error("File Error: HOME is not configured");
+                base += "/.local/share";
+            }
+            base += "/skrumi";
+#endif
+            auto directory = pathOf(base);
+            fs::create_directories(directory);
+            return text(platform::pathToUtf8(directory));
         });
     add({"os_cwd", "string", {}, 0, false, "os", "Текущий рабочий каталог процесса."},
         [](Call&) {

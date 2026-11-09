@@ -38,15 +38,23 @@ public:
 };
 }
 
-void build(const fs::path& input, fs::path output, bool noConsole, const fs::path& resourceDirectory) {
+void build(const fs::path& input, fs::path output, bool noConsole, const fs::path& resourceDirectory, bool force) {
     if (output.empty()) output = input.stem();
+    if (isSourceFile(platform::pathToUtf8(output)))
+        throw std::runtime_error("Build Error: output must not overwrite source code");
 #ifdef _WIN32
     auto extension = output.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension != ".exe") output += ".exe";
 #endif
     output = fs::absolute(output);
-    if (fs::exists(fs::symlink_status(output))) throw std::runtime_error("Build Error: output already exists: " + platform::pathToUtf8(output));
+    const auto status = fs::symlink_status(output);
+    if (fs::exists(status) && !force) throw std::runtime_error("Build Error: output already exists: " + platform::pathToUtf8(output) + "; use --force to replace it");
+    if (fs::is_symlink(status) || (fs::exists(status) && !fs::is_regular_file(status)))
+        throw std::runtime_error("Build Error: output must be a regular file, not a link or directory");
+    if (isSourceFile(platform::pathToUtf8(output)) || fs::weakly_canonical(input) == fs::weakly_canonical(output) ||
+        (fs::exists(status) && fs::equivalent(input, output)))
+        throw std::runtime_error("Build Error: output must not overwrite source code");
     if (!fs::is_regular_file(input)) throw std::runtime_error("Build Error: could not open file '" + platform::pathToUtf8(input) + "'");
     auto sources = collect(platform::pathToUtf8(input), *filesystemSources());
     if (!resourceDirectory.empty()) {
@@ -95,13 +103,14 @@ void build(const fs::path& input, fs::path output, bool noConsole, const fs::pat
     // Validate the bytes actually written before publishing the executable.
     unpack(readImage(candidate));
 #ifdef _WIN32
-    // MoveFileW refuses to replace an existing destination, including a racing writer.
-    if (!MoveFileW(candidate.c_str(), output.c_str())) throw std::runtime_error("Build Error: cannot publish output (Windows error " + std::to_string(GetLastError()) + ")");
+    // Without --force the atomic move refuses an existing destination.
+    if (!MoveFileExW(candidate.c_str(), output.c_str(), force ? MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH : 0)) throw std::runtime_error("Build Error: cannot publish output (Windows error " + std::to_string(GetLastError()) + ")");
 #else
     fs::permissions(candidate, fs::perms::owner_all | fs::perms::group_read | fs::perms::group_exec |
                     fs::perms::others_read | fs::perms::others_exec);
     // Same filesystem; link publishes atomically and never overwrites a source or output.
-    fs::create_hard_link(candidate, output);
+    if (force) fs::rename(candidate, output);
+    else fs::create_hard_link(candidate, output);
 #endif
 }
 } // namespace skrumi::bundle

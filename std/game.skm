@@ -1,0 +1,158 @@
+//! Маленькие игровые помощники. Все update-функции принимают delta в секундах;
+//! геометрия и таймеры работают без окна и пригодны для headless-тестов.
+using math as game_math;
+using graphics as game_graphics;
+
+struct Vec2 {
+    float x = 0.0;
+    float y = 0.0;
+    float length() { return sqrt(this.x * this.x + this.y * this.y); }
+    Vec2 normalized() {
+        float n = this.length();
+        return n == 0.0 ? Vec2() : Vec2(this.x / n, this.y / n);
+    }
+    Vec2 plus(Vec2 other) { return Vec2(this.x + other.x, this.y + other.y); }
+    Vec2 scaled(float factor) { return Vec2(this.x * factor, this.y * factor); }
+}
+struct Rect {
+    float x = 0.0;
+    float y = 0.0;
+    float width = 0.0;
+    float height = 0.0;
+}
+struct Circle {
+    float x = 0.0;
+    float y = 0.0;
+    float radius = 0.0;
+}
+/// Границы считаются столкновением, отрицательный радиус/размер — ошибка.
+bool circles_collide(Circle a, Circle b) {
+    if (a.radius < 0.0 || b.radius < 0.0) { throw "circle radius must be non-negative"; }
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    float r = a.radius + b.radius;
+    return dx * dx + dy * dy <= r * r;
+}
+bool rects_collide(Rect a, Rect b) {
+    if (a.width < 0.0 || a.height < 0.0 || b.width < 0.0 || b.height < 0.0) { throw "rectangle dimensions must be non-negative"; }
+    return a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y;
+}
+bool circle_rect_collide(Circle circle, Rect rect) {
+    if (circle.radius < 0.0 || rect.width < 0.0 || rect.height < 0.0) { throw "dimensions must be non-negative"; }
+    float x = clamp(circle.x, rect.x, rect.x + rect.width);
+    float y = clamp(circle.y, rect.y, rect.y + rect.height);
+    float dx = circle.x - x;
+    float dy = circle.y - y;
+    return dx * dx + dy * dy <= circle.radius * circle.radius;
+}
+struct Camera2D {
+    float x = 0.0;
+    float y = 0.0;
+    float zoom = 1.0;
+    Vec2 world_to_screen(Vec2 position) {
+        if (this.zoom <= 0.0) { throw "camera zoom must be positive"; }
+        return Vec2((position.x - this.x) * this.zoom, (position.y - this.y) * this.zoom);
+    }
+    Vec2 screen_to_world(Vec2 position) {
+        if (this.zoom <= 0.0) { throw "camera zoom must be positive"; }
+        return Vec2(position.x / this.zoom + this.x, position.y / this.zoom + this.y);
+    }
+    void follow(Vec2 target, float speed, float delta) {
+        if (speed < 0.0 || delta < 0.0) { throw "camera speed/delta must be non-negative"; }
+        float t = 1.0 - exp(-speed * delta);
+        this.x = game_math.lerp(this.x, target.x, t);
+        this.y = game_math.lerp(this.y, target.y, t);
+    }
+}
+struct Timer {
+    float remaining = 0.0;
+    void start(float seconds) {
+        if (seconds < 0.0) { throw "timer duration must be non-negative"; }
+        this.remaining = seconds;
+    }
+    bool update(float delta) {
+        if (delta < 0.0) { throw "timer delta must be non-negative"; }
+        bool running = this.remaining > 0.0;
+        this.remaining = max(0.0, this.remaining - delta);
+        return running && this.remaining == 0.0;
+    }
+    bool ready() { return this.remaining == 0.0; }
+}
+/// Периодический таймер сохраняет остаток; возвращает число прошедших периодов.
+struct Interval {
+    float period = 1.0;
+    float elapsed = 0.0;
+    int update(float delta) {
+        if (this.period <= 0.0 || delta < 0.0) { throw "interval requires period > 0 and delta >= 0"; }
+        this.elapsed += delta;
+        int ticks = to_int(floor((this.elapsed + this.period * 1e-12) / this.period));
+        this.elapsed = max(0.0, this.elapsed - ticks * this.period);
+        return ticks;
+    }
+}
+struct Tween {
+    float from = 0.0;
+    float to = 1.0;
+    float duration = 1.0;
+    float elapsed = 0.0;
+    float update(float delta) {
+        if (this.duration <= 0.0 || delta < 0.0) { throw "tween requires duration > 0 and delta >= 0"; }
+        this.elapsed = min(this.duration, this.elapsed + delta);
+        return game_math.lerp(this.from, this.to, game_math.smoothstep(0.0, 1.0, this.elapsed / this.duration));
+    }
+    bool finished() { return this.elapsed >= this.duration; }
+}
+struct Particle {
+    float x = 0.0;
+    float y = 0.0;
+    float vx = 0.0;
+    float vy = 0.0;
+    float life = 0.0;
+    float total_life = 1.0;
+    int color = 16777215;
+    int radius = 2;
+}
+/// Заранее выделенный pool; при заполнении новые частицы отклоняются.
+array<Particle> particle_pool(int capacity) {
+    if (capacity < 0 || capacity > 100000) { throw "particle capacity must be 0..100000"; }
+    array<Particle> particles;
+    for (int i = 0; i < capacity; i++) { push(particles, Particle()); }
+    return particles;
+}
+bool spawn_particle(array<Particle> particles, float x, float y, float vx, float vy, float life, int color, int radius) {
+    if (life <= 0.0 || radius < 0) { throw "particle requires life > 0 and radius >= 0"; }
+    for (particle in particles) {
+        if (particle.life <= 0.0) {
+            particle.x = x; particle.y = y; particle.vx = vx; particle.vy = vy;
+            particle.life = life; particle.total_life = life; particle.color = color; particle.radius = radius;
+            return true;
+        }
+    }
+    return false;
+}
+void update_particles(array<Particle> particles, float delta) {
+    if (delta < 0.0) { throw "particle delta must be non-negative"; }
+    for (particle in particles) {
+        if (particle.life > 0.0) {
+            particle.life = max(0.0, particle.life - delta);
+            particle.x += particle.vx * delta; particle.y += particle.vy * delta;
+        }
+    }
+}
+void draw_particles(array<Particle> particles) {
+    for (particle in particles) {
+        if (particle.life > 0.0) {
+            game_graphics.draw_circle_alpha(to_int(particle.x), to_int(particle.y), particle.radius, particle.color,
+                to_int(clamp(particle.life / particle.total_life, 0.0, 1.0) * 255));
+        }
+    }
+}
+/// Имя сохранения — один компонент. Приложения используют собственный префикс.
+string save_path(string name) {
+    if (name == "" || name == "." || name == ".." || str_contains(name, "/") || str_contains(name, "\\") || str_contains(name, ":") || str_contains(name, "\u{0}")) {
+        throw "save name must be a filename without separators";
+    }
+    return user_data_dir() + "/" + name;
+}
+void save_json(string name, value) { fs_write_atomic(save_path(name), json_value(value)); }
+func load_json = (string name) => json_decode(fs_read_checked(save_path(name)));

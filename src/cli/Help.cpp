@@ -9,6 +9,7 @@ const std::map<std::string, const char*>& commands() {
     static const std::map<std::string, const char*> text = {
         {"run",
          "Usage: skrumi [runtime options] <script.skm> [args...]\n"
+         "       skrumi run <script.skm|project-directory> [args...]\n"
          "       app [runtime options] [args...]\n"
          "\n"
          "Runs a program. User arguments reach os_args() unchanged. Reserved options\n"
@@ -36,8 +37,10 @@ const std::map<std::string, const char*>& commands() {
          "  skrumi --skrumi-width 960 --skrumi-height 540 game.skm --level 2\n"
          "  game.exe --skrumi-no-console --skrumi-fullscreen\n"
          "  game.exe --skrumi-console --skrumi-windowed -- --skrumi-width custom\n"},
+        {"init", "Usage: skrumi init [directory]\nCreates main.skm, skrumi.toml, .gitignore and tests/smoke_test.skm. Never overwrites existing files.\n"},
         {"check",
-         "Usage: skrumi check <script.skm>\n"
+         "Usage: skrumi check <script.skm|directory> [--deny-warnings] [--max-errors N]\n"
+         "       skrumi check --project [--deny-warnings]\n"
          "\n"
          "Reports syntax errors, type errors and unknown names without running the\n"
          "program. Exits with 1 when there is an error.\n"
@@ -45,15 +48,16 @@ const std::map<std::string, const char*>& commands() {
          "Example:\n"
          "  skrumi check app.skm\n"},
         {"build",
-         "Usage: skrumi build <file.skm> [-o|--output name] [--console|--no-console]\n"
+         "Usage: skrumi build <file.skm|project-directory> [-o|--output name] [--force] [--console|--no-console]\n"
          "\n"
          "Builds one standalone executable for this OS and CPU: the interpreter, the\n"
          "program and every module it uses (using, include) in a single file. The people\n"
          "who run it need neither Skrumi nor a compiler.\n"
          "\n"
          "  -o, --output name   Output file; the script's name by default. On Windows\n"
-         "                      .exe is added. An existing file is never overwritten.\n"
+         "                      .exe is added. An existing file requires --force.\n"
          "\n"
+         "  --force            Atomically replace an existing regular output file\n"
          "  --console          Windows console EXE (default)\n"
          "  --no-console       Windows GUI EXE: no console is created at startup\n"
          "                      On Linux these switches have no effect. Last wins.\n"

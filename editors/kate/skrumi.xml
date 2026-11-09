@@ -54,6 +54,7 @@
       <item>acos</item>
       <item>all_of</item>
       <item>allow_cors</item>
+      <item>angle_difference</item>
       <item>any_of</item>
       <item>append_file</item>
       <item>architecture</item>
@@ -62,24 +63,34 @@
       <item>args</item>
       <item>array_all</item>
       <item>array_any</item>
+      <item>array_chunk</item>
       <item>array_copy</item>
       <item>array_filter</item>
       <item>array_find</item>
+      <item>array_flatten</item>
       <item>array_index_of</item>
       <item>array_map</item>
       <item>array_reduce</item>
       <item>array_reverse</item>
+      <item>array_shuffle</item>
       <item>array_slice</item>
       <item>array_sort</item>
+      <item>array_unique</item>
       <item>asin</item>
       <item>assert</item>
+      <item>assert_close</item>
       <item>assert_equal</item>
       <item>atan</item>
       <item>atan2</item>
       <item>beep</item>
       <item>body</item>
+      <item>byte_size</item>
       <item>cancel_window_close</item>
+      <item>canvas_png</item>
       <item>ceil</item>
+      <item>char_length</item>
+      <item>circle_rect_collide</item>
+      <item>circles_collide</item>
       <item>clamp</item>
       <item>clamp01</item>
       <item>clear</item>
@@ -89,6 +100,7 @@
       <item>clip_end</item>
       <item>clipboard_text</item>
       <item>clock_ms</item>
+      <item>clock_ms64</item>
       <item>close_tcp</item>
       <item>close_window</item>
       <item>color</item>
@@ -100,6 +112,7 @@
       <item>copy_checked</item>
       <item>copy_path</item>
       <item>cos</item>
+      <item>create_canvas</item>
       <item>cwd</item>
       <item>debug</item>
       <item>decode_image</item>
@@ -109,21 +122,41 @@
       <item>dns_lookup</item>
       <item>double_clicked</item>
       <item>download</item>
+      <item>draw_canvas</item>
       <item>draw_circle</item>
+      <item>draw_circle_alpha</item>
+      <item>draw_circles</item>
+      <item>draw_ellipse</item>
       <item>draw_font_text</item>
+      <item>draw_font_text_alpha</item>
       <item>draw_frame</item>
+      <item>draw_gradient</item>
+      <item>draw_icon</item>
       <item>draw_image</item>
       <item>draw_image_alpha</item>
+      <item>draw_image_ex</item>
+      <item>draw_image_nine_slice</item>
       <item>draw_image_part</item>
+      <item>draw_image_part_ex</item>
       <item>draw_image_scaled</item>
       <item>draw_line</item>
+      <item>draw_line_alpha</item>
+      <item>draw_lines</item>
+      <item>draw_particles</item>
+      <item>draw_polygon</item>
       <item>draw_rect</item>
       <item>draw_rect_alpha</item>
       <item>draw_rects</item>
       <item>draw_ring</item>
+      <item>draw_ring_alpha</item>
       <item>draw_sprites</item>
       <item>draw_text</item>
+      <item>draw_text_aligned</item>
+      <item>draw_text_alpha</item>
+      <item>draw_text_wrapped</item>
       <item>draw_tiles</item>
+      <item>draw_to_canvas</item>
+      <item>draw_triangle</item>
       <item>ends_with</item>
       <item>env</item>
       <item>env_default</item>
@@ -137,6 +170,7 @@
       <item>exit</item>
       <item>exp</item>
       <item>extract_archive</item>
+      <item>fade_out</item>
       <item>fail</item>
       <item>file_extension</item>
       <item>file_name</item>
@@ -148,10 +182,12 @@
       <item>find_first</item>
       <item>floor</item>
       <item>font_text_width</item>
+      <item>font_with_fallback</item>
       <item>form</item>
       <item>format_bytes</item>
       <item>format_time</item>
       <item>frame_delta</item>
+      <item>free_canvas</item>
       <item>free_font</item>
       <item>free_image</item>
       <item>free_space</item>
@@ -190,7 +226,14 @@
       <item>get_or</item>
       <item>getch</item>
       <item>gfx_cancel_close</item>
+      <item>gfx_canvas_create</item>
+      <item>gfx_canvas_draw</item>
+      <item>gfx_canvas_free</item>
+      <item>gfx_canvas_png</item>
+      <item>gfx_canvas_select</item>
       <item>gfx_circle</item>
+      <item>gfx_circle_alpha</item>
+      <item>gfx_circles</item>
       <item>gfx_clear</item>
       <item>gfx_clip_begin</item>
       <item>gfx_clip_end</item>
@@ -201,29 +244,41 @@
       <item>gfx_desktop_metrics</item>
       <item>gfx_double_click</item>
       <item>gfx_down</item>
+      <item>gfx_ellipse</item>
       <item>gfx_focused</item>
+      <item>gfx_font_fallback</item>
       <item>gfx_font_free</item>
       <item>gfx_font_load</item>
       <item>gfx_font_text</item>
+      <item>gfx_font_text_alpha</item>
       <item>gfx_font_width</item>
       <item>gfx_frame</item>
       <item>gfx_fullscreen</item>
+      <item>gfx_gradient</item>
       <item>gfx_height</item>
       <item>gfx_image_alpha</item>
       <item>gfx_image_decode</item>
       <item>gfx_image_draw</item>
       <item>gfx_image_draw_part</item>
+      <item>gfx_image_ex</item>
       <item>gfx_image_free</item>
       <item>gfx_image_height</item>
       <item>gfx_image_load</item>
+      <item>gfx_image_part_ex</item>
       <item>gfx_image_pixel</item>
       <item>gfx_image_width</item>
       <item>gfx_intercept_close</item>
       <item>gfx_line</item>
+      <item>gfx_line_alpha</item>
+      <item>gfx_lines</item>
+      <item>gfx_mouse_captured</item>
+      <item>gfx_mouse_delta</item>
+      <item>gfx_mouse_visible</item>
       <item>gfx_mouse_x</item>
       <item>gfx_mouse_y</item>
       <item>gfx_open</item>
       <item>gfx_poll</item>
+      <item>gfx_polygon</item>
       <item>gfx_present</item>
       <item>gfx_pressed</item>
       <item>gfx_rect</item>
@@ -234,12 +289,18 @@
       <item>gfx_resized</item>
       <item>gfx_rgb</item>
       <item>gfx_ring</item>
+      <item>gfx_ring_alpha</item>
+      <item>gfx_screenshot</item>
       <item>gfx_set_clipboard</item>
       <item>gfx_set_fullscreen</item>
       <item>gfx_set_size</item>
       <item>gfx_sprites</item>
+      <item>gfx_target_fps</item>
       <item>gfx_text</item>
+      <item>gfx_text_alpha</item>
       <item>gfx_text_input</item>
+      <item>gfx_text_missing</item>
+      <item>gfx_text_supported</item>
       <item>gfx_text_width</item>
       <item>gfx_tiles</item>
       <item>gfx_ui_click</item>
@@ -258,6 +319,9 @@
       <item>gfx_wheel</item>
       <item>gfx_width</item>
       <item>goto_xy</item>
+      <item>grapheme_length</item>
+      <item>grapheme_split</item>
+      <item>grapheme_substring</item>
       <item>has</item>
       <item>header</item>
       <item>hide_cursor</item>
@@ -319,6 +383,7 @@
       <item>listen</item>
       <item>listen_tls</item>
       <item>load_font</item>
+      <item>load_font_file</item>
       <item>load_image</item>
       <item>log</item>
       <item>log10</item>
@@ -335,10 +400,12 @@
       <item>method</item>
       <item>min</item>
       <item>modified_ms</item>
+      <item>mouse_delta</item>
       <item>mouse_wheel</item>
       <item>mouse_x</item>
       <item>mouse_y</item>
       <item>move_path</item>
+      <item>move_toward</item>
       <item>not_found</item>
       <item>now_text</item>
       <item>open_path</item>
@@ -366,9 +433,11 @@
       <item>path_parent</item>
       <item>path_safe_join</item>
       <item>path_stem</item>
+      <item>pause_sound</item>
       <item>permissions</item>
       <item>platform</item>
       <item>play_sound</item>
+      <item>play_sound_ex</item>
       <item>play_tone</item>
       <item>pop</item>
       <item>post</item>
@@ -387,11 +456,14 @@
       <item>radians</item>
       <item>random</item>
       <item>random_float</item>
+      <item>random_range</item>
+      <item>random_seed</item>
       <item>range</item>
       <item>read_checked</item>
       <item>read_file</item>
       <item>read_lines</item>
       <item>read_resource</item>
+      <item>rects_collide</item>
       <item>recv_tcp</item>
       <item>redirect</item>
       <item>registry_user_compare_exchange</item>
@@ -427,6 +499,7 @@
       <item>respond_html</item>
       <item>respond_status</item>
       <item>respond_text</item>
+      <item>resume_sound</item>
       <item>reverse</item>
       <item>rgb</item>
       <item>round</item>
@@ -435,6 +508,9 @@
       <item>run_capture</item>
       <item>run_output</item>
       <item>safe_join</item>
+      <item>save_json</item>
+      <item>save_path</item>
+      <item>save_screenshot</item>
       <item>save_upload</item>
       <item>secret</item>
       <item>send_file</item>
@@ -455,31 +531,52 @@
       <item>server_static</item>
       <item>server_stop</item>
       <item>set</item>
+      <item>set_channel_volume</item>
       <item>set_clipboard_text</item>
       <item>set_cookie</item>
       <item>set_env</item>
       <item>set_header</item>
+      <item>set_master_volume</item>
+      <item>set_mouse_captured</item>
+      <item>set_mouse_visible</item>
       <item>set_permissions</item>
+      <item>set_sound_pan</item>
+      <item>set_sound_volume</item>
+      <item>set_target_fps</item>
       <item>set_window_fullscreen</item>
       <item>set_window_resizable</item>
       <item>set_window_size</item>
       <item>sha256_bytes</item>
       <item>show_cursor</item>
+      <item>shuffle</item>
       <item>sign</item>
       <item>sin</item>
       <item>size</item>
       <item>sleep_ms</item>
       <item>slice</item>
+      <item>smoothstep</item>
       <item>sort</item>
       <item>sort_by</item>
+      <item>sound_channel_volume</item>
+      <item>sound_fade_out</item>
+      <item>sound_is_playing</item>
+      <item>sound_master_volume</item>
+      <item>sound_pan</item>
+      <item>sound_pause</item>
       <item>sound_play</item>
+      <item>sound_play_ex</item>
+      <item>sound_playing</item>
       <item>sound_stop</item>
+      <item>sound_stop_handle</item>
       <item>sound_tone</item>
+      <item>sound_volume</item>
+      <item>spawn_particle</item>
       <item>split</item>
       <item>sqrt</item>
       <item>starts_with</item>
       <item>static_files</item>
       <item>stop_server</item>
+      <item>stop_sound</item>
       <item>stop_sounds</item>
       <item>str_contains</item>
       <item>str_ends_with</item>
@@ -511,7 +608,11 @@
       <item>term_reset</item>
       <item>term_show_cursor</item>
       <item>term_write</item>
+      <item>text_ellipsis</item>
+      <item>text_height</item>
       <item>text_input</item>
+      <item>text_missing_glyphs</item>
+      <item>text_supported</item>
       <item>text_width</item>
       <item>time_format</item>
       <item>time_now_ms</item>
@@ -558,11 +659,13 @@
       <item>ui_wheel</item>
       <item>ui_wrap_text</item>
       <item>unix_time_ms</item>
+      <item>update_particles</item>
       <item>upload_name</item>
       <item>upper</item>
       <item>uptime_ms</item>
       <item>url_decode</item>
       <item>url_encode</item>
+      <item>user_data_dir</item>
       <item>user_directory</item>
       <item>user_path_apply</item>
       <item>user_path_plan</item>
@@ -578,6 +681,8 @@
       <item>window_poll</item>
       <item>window_resized</item>
       <item>window_width</item>
+      <item>wrap</item>
+      <item>wrap_bitmap_text</item>
       <item>write</item>
       <item>write_atomic</item>
       <item>write_file</item>
@@ -600,7 +705,9 @@
         <DetectChar char="&quot;" attribute="String" context="String"/>
         
         <!-- Numbers -->
-        <HlCHex attribute="Hex" context="#stay"/>
+        <RegExpr String="\b0[xX][0-9a-fA-F](_?[0-9a-fA-F])*\b|\b0[bB][01](_?[01])*\b" attribute="Hex" context="#stay"/>
+        <RegExpr String="\b[0-9](_?[0-9])*(\.[0-9](_?[0-9])*([eE][+-]?[0-9](_?[0-9])*)?|[eE][+-]?[0-9](_?[0-9])*)\b" attribute="Float" context="#stay"/>
+        <RegExpr String="\b[0-9](_?[0-9])*\b" attribute="Decimal" context="#stay"/>
         <Float attribute="Float" context="#stay"/>
         <Int attribute="Decimal" context="#stay"/>
         

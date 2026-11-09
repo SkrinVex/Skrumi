@@ -113,6 +113,8 @@ void Resolver::visit(Node* node) {
     } else if (auto* n = dynamic_cast<VarAssignNode*>(node)) {
         visit(n->expr.get());
         n->ref = find(n->name);
+    } else if (auto* n = dynamic_cast<PathIncNode*>(node)) {
+        visit(n->target.get());
     } else if (auto* n = dynamic_cast<PostIncNode*>(node)) {
         n->ref = find(n->name);
     } else if (auto* n = dynamic_cast<VarDeclNode*>(node)) {
@@ -191,6 +193,8 @@ void Resolver::visit(Node* node) {
         lambda(*n);
     } else if (auto* n = dynamic_cast<ReturnNode*>(node)) {
         visit(n->expr.get());
+    } else if (auto* n = dynamic_cast<ConditionalNode*>(node)) {
+        visit(n->condition.get()); visit(n->yes.get()); visit(n->no.get());
     } else if (auto* n = dynamic_cast<BinOpNode*>(node)) {
         visit(n->left.get());
         visit(n->right.get());

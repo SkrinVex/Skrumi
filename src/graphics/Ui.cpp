@@ -1,4 +1,5 @@
 #include "Font.h"
+#include "skrumi/Unicode.h"
 #include "Graphics.h"
 #include <algorithm>
 #include <chrono>
@@ -7,17 +8,7 @@
 namespace skrumi::graphics {
 namespace {
 
-std::vector<std::string> characters(const std::string& text) {
-    std::vector<std::string> out;
-    for (size_t i = 0; i < text.size();) {
-        unsigned char lead = static_cast<unsigned char>(text[i]);
-        size_t length = lead < 0x80 ? 1 : (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 : (lead & 0xF8) == 0xF0 ? 4 : 1;
-        length = std::min(length, text.size() - i);
-        out.push_back(text.substr(i, length));
-        i += length;
-    }
-    return out;
-}
+std::vector<std::string> characters(const std::string& text) { return unicode::graphemes(text); }
 
 std::string join(const std::vector<std::string>& parts, size_t from, size_t to) {
     std::string out;
@@ -195,12 +186,12 @@ std::string Ui::text(const std::string& id, int x, int y, int width, int height,
     Region region = add(id, x, y, width, height, true, window);
     auto chars = characters(value);
     Field& state = field(id);
-    const int pad = 4 * scale, cell = 6 * scale;
+    const int pad = 4 * scale;
     int available = std::max(1, width - 2 * pad);
     std::vector<int> offsets;
     auto measure = [&]() {
         offsets.clear(); offsets.push_back(0);
-        for (const auto& ch : chars) offsets.push_back(offsets.back() + (font ? font->width(ch, pixels) : cell));
+        for (const auto& ch : chars) offsets.push_back(offsets.back() + (font ? font->width(ch, pixels) : Surface::textWidth(ch, scale) + scale));
     };
     measure();
     state.scroll = std::min(state.scroll, chars.size());
@@ -225,14 +216,24 @@ std::string Ui::text(const std::string& id, int x, int y, int width, int height,
             chars.clear(); state.cursor = 0; state.scroll = 0; state.selectedAll = false;
             return true;
         };
+        auto resegment = [&]() {
+            // Separate OS text events can extend an existing cluster (combining
+            // accents, skin tones and ZWJ). Re-segment the full edited text.
+            size_t caretByte = join(chars, 0, state.cursor).size();
+            std::string combined = join(chars, 0, chars.size());
+            auto boundaries = unicode::graphemeBoundaries(combined);
+            state.cursor = static_cast<size_t>(std::lower_bound(boundaries.begin(), boundaries.end(), caretByte) - boundaries.begin());
+            chars = characters(combined);
+        };
         auto insert = [&](const std::string& typed) {
             if (!typed.empty()) eraseSelection();
             for (auto& ch : characters(typed)) {
-                if (ch == "\n" || ch == "\r" || ch == "\t") continue;
+                if (ch.find_first_of("\n\r\t") != std::string::npos) continue;
                 if (chars.size() >= 65536) break;
                 chars.insert(chars.begin() + static_cast<std::ptrdiff_t>(state.cursor), ch);
                 ++state.cursor;
             }
+            resegment();
         };
         // Replay the frame's typing in order: "x", Backspace, "y" gives "y".
         for (const auto& step : window.edits()) {
@@ -253,6 +254,7 @@ std::string Ui::text(const std::string& id, int x, int y, int width, int height,
                 case 'C': if (step.control) window.setClipboard(join(chars, 0, chars.size())); break;
                 default: break;
             }
+            if (step.key == 8 || step.key == 46) resegment();
         }
     }
 

@@ -50,3 +50,28 @@ int sign(float value) {
 bool is_even(int value) {
     return value % 2 == 0;
 }
+
+/// Плавная интерполяция 0..1 между edge0 и edge1; совпадающие границы — ошибка.
+float smoothstep(float edge0, float edge1, float value) {
+    if (edge0 == edge1) { throw "smoothstep edges must differ"; }
+    float t = clamp01((value - edge0) / (edge1 - edge0));
+    return t * t * (3.0 - 2.0 * t);
+}
+/// Циклическое значение в полуинтервале [low, high), включая отрицательные входы.
+float wrap(float value, float low, float high) {
+    if (high <= low) { throw "wrap requires high > low"; }
+    float span = high - low;
+    return low + ((value - low) % span + span) % span;
+}
+/// Приближение к target без перескока; delta >= 0.
+float move_toward(float value, float target, float delta) {
+    if (delta < 0.0) { throw "move_toward delta must be non-negative"; }
+    return value < target ? min(value + delta, target) : max(value - delta, target);
+}
+/// Кратчайшая знаковая разница углов в радианах, [-PI, PI).
+float angle_difference(float from, float to) { return wrap(to - from, -PI, PI); }
+/// Случайное дробное число в [low, high); использует random_seed.
+float random_range(float low, float high) {
+    if (high < low) { throw "random_range requires high >= low"; }
+    return low + (high - low) * random_float();
+}

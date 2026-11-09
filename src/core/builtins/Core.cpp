@@ -15,9 +15,18 @@ namespace {
 
 constexpr size_t maxElements = size_t{1} << 26;
 
-std::mt19937& generator() {
-    static std::mt19937 engine{std::random_device{}()};
-    return engine;
+std::mt19937& generator(Call& call) {
+    auto& engine = call.ctx.getRoot()->randomEngine;
+    if (!engine) engine = std::make_shared<std::mt19937>(std::random_device{}());
+    return *engine;
+}
+// Specify the mapping as well as the engine: std distributions/shuffle may differ
+// between the MSVC and GCC libraries, breaking cross-platform replays.
+uint64_t randomBelow(Call& call, uint64_t range) {
+    uint64_t threshold = (uint64_t(1) << 32) % range;
+    uint64_t sample;
+    do sample = generator(call)(); while (sample < threshold);
+    return sample % range;
 }
 
 // Arrays print as [a, b, c]; their internal id means nothing to a reader.
@@ -347,6 +356,13 @@ void addCoreBuiltins(std::vector<Builtin>& out) {
     add({"round", "int", {{"number", "value"}}, 1, false, "",
          "Округляет до ближайшего целого (половина — от нуля).\n\n```skrumi\nint r = round(3.6); // 4\n```"},
         [](Call& c) { return integer(static_cast<long long>(std::round(c.number(0)))); });
+    add({"random_seed", "void", {{"int", "seed"}}, 1, false, "", "Устанавливает seed MT19937 для текущего интерпретатора; random, random_float и shuffle воспроизводимы между платформами."},
+        [](Call& c) { generator(c).seed(static_cast<uint32_t>(c.integer(0))); return nothing(); });
+    auto shuffled = [](Call& c) { ValueList values = c.array(0); for (size_t n = values.size(); n > 1; --n) std::swap(values[n-1], values[randomBelow(c, n)]); return makeArray(std::move(values)); };
+    add({"shuffle", "array", {{"array", "items"}}, 1, false, "arrays", "Новый перемешанный массив (Fisher–Yates), использует random_seed; исходный массив сохраняется."}, shuffled);
+    add({"array_shuffle", "array", {{"array", "items"}}, 1, false, "arrays", "Синоним shuffle: новая перемешанная копия массива."}, shuffled);
+    add({"assert_close", "void", {{"number", "actual"}, {"number", "expected"}, {"number", "epsilon"}}, 3, false, "", "Проверяет абсолютную погрешность; epsilon должен быть конечным неотрицательным числом."},
+        [](Call& c) { double a = c.number(0), b = c.number(1), epsilon = c.number(2); if (!std::isfinite(epsilon) || epsilon < 0) throw std::runtime_error("Type Error: epsilon must be finite and non-negative"); if (!std::isfinite(a) || !std::isfinite(b) || std::abs(a-b) > epsilon) throw std::runtime_error("Assertion Error: values differ by more than epsilon"); return nothing(); });
     add({"random", "int", {{"int", "min"}, {"int", "max"}}, 2, false, "",
          "Случайное целое от `min` до `max` включительно.\n\n```skrumi\nint dice = random(1, 6);\n```"},
         [](Call& c) {
@@ -354,12 +370,14 @@ void addCoreBuiltins(std::vector<Builtin>& out) {
             if (low > high)
                 throw std::runtime_error("Runtime Error: random() lower bound " + std::to_string(low) +
                                          " is greater than upper bound " + std::to_string(high));
-            std::uniform_int_distribution<long long> distribution(low, high);
-            return integer(distribution(generator()));
+            return integer(low + static_cast<long long>(randomBelow(c, static_cast<uint64_t>(high - low) + 1)));
         });
     add({"random_float", "float", {}, 0, false, "",
          "Случайное дробное число из полуинтервала [0, 1)."},
-        [](Call&) { return real(std::uniform_real_distribution<double>(0.0, 1.0)(generator())); });
+        [](Call& c) {
+            uint64_t high = generator(c)() >> 5, low = generator(c)() >> 6;
+            return real(static_cast<double>(high * 67108864ULL + low) / 9007199254740992.0);
+        });
     add({"abs", "number", {{"number", "value"}}, 1, false, "",
          "Модуль числа. Сохраняет тип аргумента: `int` для `int`, иначе `float`."},
         [](Call& c) { return numberResult(c, std::fabs(c.number(0)), "abs"); });

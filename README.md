@@ -1,5 +1,7 @@
 # <img src="resources/branding/skrumi-mark.svg" width="40" height="40" alt=""> Skrumi
 
+[English overview](docs/OVERVIEW_EN.md) · [Проекты](docs/PROJECTS.md) · [Шрифты и эмодзи](docs/FONTS.md) · [Игры](docs/GAME_DEVELOPMENT.md) · [Статус развития](docs/DEVELOPMENT_STATUS.md)
+
 Единственные команда и расширение исходников — `skrumi` и `.skm`.
 [Перенос старых проектов](docs/MIGRATION.md).
 
@@ -54,7 +56,7 @@ for (int i = 0; i < size(words); i++) {
 - Обработка ошибок: `try` / `catch` / `finally` и `throw`.
 - Строки с полной поддержкой UTF-8: длина, подстроки и поиск считают символы,
   `upper`/`lower` понимают кириллицу.
-- Стандартная библиотека из 17 модулей: `string`, `arrays`, `math`, `json`, `fs`,
+- Стандартная библиотека из 18 модулей: `string`, `arrays`, `math`, `json`, `fs`,
   `os`, `time`, `env`, `log`, `http`, `server`, `net`, `terminal`, `graphics`, `ui`, `sound`, `resources`.
 - Веб-сервер для сайтов и API: маршруты с параметрами (`/users/:id`), статические
   файлы, HTML-шаблоны, формы и загрузка файлов, cookies, редиректы, скачивание, CORS,

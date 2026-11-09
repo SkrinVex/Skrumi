@@ -68,6 +68,15 @@ const char* tokenTypeName(TokenType type) {
         case TokenType::STAR_ASSIGN: return "'*='";
         case TokenType::SLASH_ASSIGN: return "'/='";
         case TokenType::MOD_ASSIGN: return "'%='";
+        case TokenType::BIT_AND: return "'&'";
+        case TokenType::BIT_OR: return "'|'";
+        case TokenType::BIT_XOR: return "'^'";
+        case TokenType::BIT_NOT: return "'~'";
+        case TokenType::BIT_AND_ASSIGN: return "'&='";
+        case TokenType::BIT_OR_ASSIGN: return "'|='";
+        case TokenType::BIT_XOR_ASSIGN: return "'^='";
+        case TokenType::SHL_ASSIGN: return "'<<='";
+        case TokenType::SHR_ASSIGN: return "'>>='";
         case TokenType::INT_KW: return "'int'";
         case TokenType::FLOAT_KW: return "'float'";
         case TokenType::STRING_KW: return "'string'";
@@ -206,6 +215,8 @@ void Lexer::advanceChar() {
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
     diagnostics.clear();
+    // A BOM is an encoding signature only at the start; preserve byte offsets.
+    if (pos == 0 && source.compare(0, 3, "\xEF\xBB\xBF") == 0) pos = 3;
 
     while (pos < source.length()) {
         char current = source[pos];
@@ -224,25 +235,72 @@ std::vector<Token> Lexer::tokenize() {
         }
 
         SourcePosition startPos = currentPosition();
+        if (current == '/' && pos + 1 < source.size() && source[pos + 1] == '*') {
+            advanceChar(); advanceChar();
+            while (pos < source.size() && !(source[pos] == '*' && pos + 1 < source.size() && source[pos + 1] == '/'))
+                advanceChar();
+            if (pos == source.size()) {
+                const std::string message = "Unterminated block comment; expected '*/'";
+                if (!collectDiagnostics) throw SyntaxError("Syntax Error: " + message, startPos.line);
+                diagnostics.push_back({DiagnosticSeverity::Error, message, {startPos, currentPosition()}});
+            } else { advanceChar(); advanceChar(); }
+            continue;
+        }
 
         if (std::isdigit(static_cast<unsigned char>(current))) {
             std::string num;
-            while (pos < source.length() && std::isdigit(static_cast<unsigned char>(source[pos]))) {
-                num += source[pos];
-                advanceChar();
+            bool valid = true;
+            int base = 10;
+            if (current == '0' && pos + 1 < source.size()) {
+                char prefix = source[pos + 1];
+                if (prefix == 'x' || prefix == 'X' || prefix == 'b' || prefix == 'B') {
+                    base = prefix == 'x' || prefix == 'X' ? 16 : 2;
+                    num += source[pos]; advanceChar();
+                    num += source[pos]; advanceChar();
+                }
             }
-            if (pos < source.length() && source[pos] == '.' &&
-                pos + 1 < source.length() && std::isdigit(static_cast<unsigned char>(source[pos + 1]))) {
-                num += source[pos];
-                advanceChar();
-                while (pos < source.length() && std::isdigit(static_cast<unsigned char>(source[pos]))) {
-                    num += source[pos];
-                    advanceChar();
+            auto digit = [&](char c) {
+                return base == 16 ? std::isxdigit(static_cast<unsigned char>(c)) != 0 :
+                       base == 2 ? c == '0' || c == '1' : std::isdigit(static_cast<unsigned char>(c)) != 0;
+            };
+            auto digits = [&] {
+                bool previousDigit = false, any = false;
+                while (pos < source.size() && (digit(source[pos]) || source[pos] == '_')) {
+                    char c = source[pos];
+                    if (c == '_') {
+                        if (!previousDigit || pos + 1 >= source.size() || !digit(source[pos + 1])) valid = false;
+                    } else any = true;
+                    previousDigit = c != '_';
+                    num += c; advanceChar();
+                }
+                if (!any) valid = false;
+            };
+            digits();
+            if (base == 10 && pos + 1 < source.size() && source[pos] == '.' &&
+                std::isdigit(static_cast<unsigned char>(source[pos + 1]))) {
+                num += '.'; advanceChar(); digits();
+            }
+            if (base == 10 && pos < source.size() && (source[pos] == 'e' || source[pos] == 'E')) {
+                num += source[pos]; advanceChar();
+                if (pos < source.size() && (source[pos] == '+' || source[pos] == '-')) {
+                    num += source[pos]; advanceChar();
+                }
+                digits();
+            }
+            if (pos < source.size() && (std::isalnum(static_cast<unsigned char>(source[pos])) || source[pos] == '_')) {
+                valid = false;
+                while (pos < source.size() && (std::isalnum(static_cast<unsigned char>(source[pos])) || source[pos] == '_')) {
+                    num += source[pos]; advanceChar();
                 }
             }
             SourcePosition endPos = currentPosition();
-            tokens.push_back({TokenType::NUMBER, num, startPos.line, startPos.column, {startPos, endPos}});
-        } 
+            if (!valid) {
+                std::string message = std::string("Invalid ") + (base == 16 ? "hexadecimal" : base == 2 ? "binary" : "numeric") + " literal '" + num + "'; check base digits, exponent and separators";
+                if (!collectDiagnostics) throw SyntaxError("Syntax Error: " + message, startPos.line);
+                diagnostics.push_back({DiagnosticSeverity::Error, message, {startPos, endPos}});
+            }
+            tokens.push_back({valid ? TokenType::NUMBER : TokenType::ERROR, num, startPos.line, startPos.column, {startPos, endPos}});
+        }
         else if (current == '"') {
             advanceChar(); // consume opening quote
             scanString(tokens, startPos, false);
@@ -264,6 +322,21 @@ std::vector<Token> Lexer::tokenize() {
             tokens.push_back({type, id, startPos.line, startPos.column, range});
         } 
         else {
+            if ((current == '<' || current == '>') && pos + 2 < source.size() &&
+                source[pos + 1] == current && source[pos + 2] == '=') {
+                std::string op = source.substr(pos, 3);
+                advanceChar(); advanceChar(); advanceChar();
+                tokens.push_back({current == '<' ? TokenType::SHL_ASSIGN : TokenType::SHR_ASSIGN,
+                                  op, startPos.line, startPos.column, {startPos, currentPosition()}});
+                continue;
+            }
+            if ((current == '&' || current == '|' || current == '^') && pos + 1 < source.size() && source[pos + 1] == '=') {
+                std::string op = source.substr(pos, 2);
+                advanceChar(); advanceChar();
+                TokenType type = current == '&' ? TokenType::BIT_AND_ASSIGN : current == '|' ? TokenType::BIT_OR_ASSIGN : TokenType::BIT_XOR_ASSIGN;
+                tokens.push_back({type, op, startPos.line, startPos.column, {startPos, currentPosition()}});
+                continue;
+            }
             // Check 2-character operators
             if (current == '=' && pos + 1 < source.length() && source[pos + 1] == '>') {
                 advanceChar(); advanceChar();
@@ -346,6 +419,10 @@ std::vector<Token> Lexer::tokenize() {
             TokenType singleType = TokenType::ERROR;
             std::string singleVal(1, current);
             switch (current) {
+                case '&': singleType = TokenType::BIT_AND; break;
+                case '|': singleType = TokenType::BIT_OR; break;
+                case '^': singleType = TokenType::BIT_XOR; break;
+                case '~': singleType = TokenType::BIT_NOT; break;
                 case '+': singleType = TokenType::PLUS; break;
                 case '-': singleType = TokenType::MINUS; break;
                 case '*': singleType = TokenType::STAR; break;

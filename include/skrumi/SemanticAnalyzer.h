@@ -207,6 +207,7 @@ private:
     void checkNarrowing(const std::string& type, const Node* value);
     void checkVariable(const std::string& name, SourceRange range);
     void checkWritable(const std::string& name, SourceRange range);
+    void warnBuiltinShadow(const std::string& name, const std::string& role, SourceRange range);
     void addSymbol(Scope* scope, const Symbol& symbol, SourceRange nameRange, bool warnOnRedeclaration);
 
     void enterScope();

@@ -14,6 +14,7 @@
 #include "Help.h"
 #include "Launch.h"
 #include "Tools.h"
+#include "ProjectTools.h"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -26,7 +27,7 @@ bool skrumiHasBundleDescriptor();
 bool skrumiHasBundlePayload();
 
 // Reports the diagnostics the editor already sees, for a terminal or CI, without executing code.
-static int check(const std::string& path) {
+static int check(const std::string& path, bool denyWarnings = false, size_t maxErrors = 10) {
     if (!skrumi::isSourceFile(path)) throw std::runtime_error("source files must use .skm");
     std::ifstream file(skrumi::platform::pathFromUtf8(path), std::ios::binary);
     if (!file.is_open()) throw std::runtime_error("could not open file '" + path + "'");
@@ -36,10 +37,12 @@ static int check(const std::string& path) {
     skrumi::Lexer lexer(buffer.str(), true);
     auto tokens = lexer.tokenize();
     std::vector<skrumi::Diagnostic> diagnostics = lexer.getDiagnostics();
+    for (auto& d : diagnostics) if (d.code == 0) d.code = 1000;
 
     skrumi::Parser parser(std::move(tokens), path);
     std::vector<skrumi::Diagnostic> parserDiagnostics;
     auto program = parser.parseProgramWithDiagnostics(parserDiagnostics);
+    for (auto& d : parserDiagnostics) if (d.code == 0) d.code = 1001;
     diagnostics.insert(diagnostics.end(), parserDiagnostics.begin(), parserDiagnostics.end());
 
     // Other files of the same program declare what this one may use: the project is
@@ -54,15 +57,22 @@ static int check(const std::string& path) {
     analyzer.addProjectFiles(project.peers(canonical));
     analyzer.analyze(program.get());
     const auto& semantic = analyzer.getDiagnostics();
-    diagnostics.insert(diagnostics.end(), semantic.begin(), semantic.end());
+    if (diagnostics.empty()) diagnostics.insert(diagnostics.end(), semantic.begin(), semantic.end());
 
     int errors = 0;
+    size_t shown = 0;
     for (const auto& diagnostic : diagnostics) {
-        if (diagnostic.severity == skrumi::DiagnosticSeverity::Error) ++errors;
+        if (diagnostic.severity == skrumi::DiagnosticSeverity::Error ||
+            (denyWarnings && diagnostic.severity == skrumi::DiagnosticSeverity::Warning)) ++errors;
+        if (shown++ >= maxErrors) continue;
         std::cout << path << ":" << diagnostic.range.start.line << ":" << diagnostic.range.start.column
-                  << ": " << diagnostic.severityString() << ": " << diagnostic.message << std::endl;
+                  << ": " << diagnostic.severityString() << ": ";
+        if (diagnostic.code && diagnostic.message.rfind("SKR", 0) != 0) std::cout << "SKR" << diagnostic.code << ": ";
+        std::cout << diagnostic.message << std::endl;
     }
+    if (diagnostics.size() > maxErrors) std::cout << "shown " << maxErrors << " of " << diagnostics.size() << " diagnostics; fix the first error and check again" << std::endl;
     if (diagnostics.empty()) std::cout << path << ": no problems found" << std::endl;
+    else if (!errors) std::cout << path << ": no errors found (" << diagnostics.size() << " warnings)" << std::endl;
     return errors ? 1 : 0;
 }
 
@@ -119,7 +129,7 @@ int main(int argc, char* argv[]) {
     }
     if (argc == 2 && args[1] == "--skrumi-licenses") {
         skrumi::cli::configureConsole(skrumi::cli::ConsoleMode::Console);
-        std::cout << skrumi::platform::thirdPartyLicenses();
+        std::cout << skrumi::platform::thirdPartyLicenses() << "\n" << skrumi::cli::projectThirdPartyLicenses();
         return 0;
     }
 #if (defined(__linux__) || defined(_WIN32)) && (defined(__x86_64__) || defined(_M_X64))
@@ -161,9 +171,34 @@ int main(int argc, char* argv[]) {
         skrumi::cli::printCommandHelp(std::cout, argv[1]))
         return 0;
 
+    if (std::string(argv[1]) == "init") {
+        if (argc > 3) throw std::runtime_error("Usage: skrumi init [directory]");
+        return skrumi::cli::initProject(argc == 3 ? args[2] : ".");
+    }
     if (std::string(argv[1]) == "check") {
-        if (argc != 3) throw std::runtime_error("Usage: skrumi check <script.skm>");
-        return check(args[2]);
+        bool denyWarnings = false;
+        size_t maxErrors = 10;
+        std::vector<std::string> paths;
+        for (size_t i = 2; i < args.size(); ++i) {
+            if (args[i] == "--deny-warnings") denyWarnings = true;
+            else if (args[i] == "--project") {
+                auto project = skrumi::cli::manifest(".");
+                denyWarnings = denyWarnings || project.denyWarnings;
+                paths.push_back(".");
+            }
+            else if (args[i] == "--max-errors" && i + 1 < args.size()) {
+                const auto& count = args[++i];
+                if (count.empty() || count.find_first_not_of("0123456789") != std::string::npos)
+                    throw std::runtime_error("--max-errors requires an integer in 1..10000");
+                maxErrors = std::stoul(count);
+                if (!maxErrors || maxErrors > 10000) throw std::runtime_error("--max-errors must be 1..10000");
+            } else if (!args[i].empty() && args[i][0] != '-') paths.push_back(args[i]);
+            else throw std::runtime_error("Usage: skrumi check [--deny-warnings] [--max-errors N] <file.skm|directory>");
+        }
+        if (paths.empty()) throw std::runtime_error("Usage: skrumi check <file.skm|directory|--project>");
+        int status = 0;
+        for (const auto& path : skrumi::cli::sources(paths)) status |= check(path, denyWarnings, maxErrors);
+        return status;
     }
 
     if (std::string(argv[1]) == "fmt") return skrumi::cli::format(std::vector<std::string>(args.begin() + 2, args.end()));
@@ -178,10 +213,11 @@ int main(int argc, char* argv[]) {
         if (argc < 3 || args[2].empty() || args[2][0] == '-')
             throw std::runtime_error("Usage: skrumi build <file.skm> [-o app] [--console|--no-console]");
         std::string output, resources;
-        bool noConsole = false;
+        bool noConsole = false, force = false;
         for (size_t i = 3; i < args.size(); ++i) {
             if (args[i] == "--console") noConsole = false;
             else if (args[i] == "--no-console") noConsole = true;
+            else if (args[i] == "--force") force = true;
             else if (args[i] == "--resources") {
                 if (++i == args.size() || args[i].empty() || args[i][0] == '-' || !resources.empty())
                     throw std::runtime_error("Build Error: --resources requires one directory");
@@ -193,14 +229,26 @@ int main(int argc, char* argv[]) {
                 output = args[i];
             } else throw std::runtime_error("Build Error: unknown option '" + args[i] + "'");
         }
-        skrumi::bundle::build(skrumi::platform::pathFromUtf8(args[2]), skrumi::platform::pathFromUtf8(output), noConsole,
-                              skrumi::platform::pathFromUtf8(resources));
+        auto input = skrumi::platform::pathFromUtf8(args[2]);
+        if (std::filesystem::is_directory(input)) {
+            auto project = skrumi::cli::manifest(input);
+            input = project.entry;
+            if (resources.empty() && !project.resources.empty()) resources = skrumi::platform::pathToUtf8(project.resources);
+            if (output.empty()) {
+                std::filesystem::create_directories(project.root / "build");
+                output = skrumi::platform::pathToUtf8(project.root / "build" / project.name);
+            }
+        }
+        skrumi::bundle::build(input, skrumi::platform::pathFromUtf8(output), noConsole,
+                              skrumi::platform::pathFromUtf8(resources), force);
         return 0;
     }
 
-    auto launch = skrumi::cli::parseLaunch(std::vector<std::string>(args.begin() + 1, args.end()));
+    auto launch = skrumi::cli::parseLaunch(std::vector<std::string>(args.begin() + (args[1] == "run" ? 2 : 1), args.end()));
     if (launch.interpreter.arguments.empty()) throw std::runtime_error("expected a script filename");
     std::string script = launch.interpreter.arguments.front();
+    if (std::filesystem::is_directory(skrumi::platform::pathFromUtf8(script)))
+        script = skrumi::platform::pathToUtf8(skrumi::cli::manifest(skrumi::platform::pathFromUtf8(script)).entry);
     launch.interpreter.arguments.erase(launch.interpreter.arguments.begin());
     skrumi::cli::configureConsole(launch.console);
     runAndExit(launch.interpreter, [&](skrumi::Interpreter& interpreter) { return interpreter.runFile(script); });

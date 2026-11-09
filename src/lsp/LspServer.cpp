@@ -47,6 +47,7 @@ void LspServer::handleRequest(const JsonValue& msg, std::ostream& out) {
         docManager.setWorkspaceRoot(root);
 
         std::map<std::string, JsonValue> capabilities;
+        capabilities["codeActionProvider"] = true;
         // Full document sync; saves are reported because a saved file can change
         // what the other files of its program see.
         std::map<std::string, JsonValue> sync;
@@ -302,6 +303,48 @@ void LspServer::handleRequest(const JsonValue& msg, std::ostream& out) {
             workspaceEdit["changes"] = JsonValue(changes);
             sendResponse(id, JsonValue(workspaceEdit), out);
         }
+        return;
+    }
+
+    if (method == "textDocument/codeAction") {
+        const auto& params = msg.get("params");
+        std::string uri = params.get("textDocument").get("uri").asString();
+        auto requested = LspRange::fromJson(params.get("range"));
+        const auto* doc = docManager.getDocument(uri);
+        std::vector<JsonValue> actions;
+        if (doc && doc->analyzer) for (const auto& diagnostic : doc->diagnostics) {
+            if (diagnostic.code != 2001 || diagnostic.range.end.line < requested.start.line ||
+                diagnostic.range.start.line > requested.end.line) continue;
+            auto target = doc->analyzer->symbolAt(utf::lspLineToLine(diagnostic.range.start.line),
+                                                utf::lspCharacterToColumn(diagnostic.range.start.character));
+            if (!target.found || !target.editable) continue;
+            // Check every affected scope before suggesting a name: an inner local
+            // must not capture a reference when an outer function is renamed.
+            std::set<std::string> occupied;
+            std::map<std::string, std::vector<SourceRange>> references;
+            docManager.forEachProgramFile(uri, [&](const std::string& file, const SemanticAnalyzer& analyzer) {
+                auto ranges = analyzer.referencesTo(target);
+                for (const auto& range : ranges)
+                    for (const auto& item : analyzer.getCompletions(range.start.line, range.start.column))
+                        occupied.insert(item.label);
+                if (!ranges.empty()) references[file] = std::move(ranges);
+            });
+            std::string name = target.name + "_local";
+            for (int suffix = 2; occupied.count(name); ++suffix) name = target.name + "_local" + std::to_string(suffix);
+            std::map<std::string, JsonValue> changes;
+            for (const auto& entry : references) {
+                std::vector<JsonValue> edits;
+                for (const auto& range : entry.second)
+                    edits.emplace_back(std::map<std::string, JsonValue>{{"range", LspRange::fromSourceRange(range).toJson()}, {"newText", name}});
+                changes[entry.first] = JsonValue(edits);
+            }
+            if (changes.empty()) continue;
+            actions.emplace_back(std::map<std::string, JsonValue>{
+                {"title", "Переименовать '" + target.name + "' в '" + name + "'"},
+                {"kind", "quickfix"}, {"diagnostics", JsonValue(std::vector<JsonValue>{diagnostic.toJson()})},
+                {"edit", JsonValue(std::map<std::string, JsonValue>{{"changes", JsonValue(changes)}})}});
+        }
+        sendResponse(id, JsonValue(actions), out);
         return;
     }
 

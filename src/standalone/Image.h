@@ -14,5 +14,5 @@ Bytes pack(Bytes image, const Sources& sources, bool noConsole = false);
 Bytes readImage(const std::filesystem::path& path);
 std::filesystem::path executablePath();
 void build(const std::filesystem::path& input, std::filesystem::path output, bool noConsole = false,
-           const std::filesystem::path& resources = {});
+           const std::filesystem::path& resources = {}, bool force = false);
 } // namespace skrumi::bundle

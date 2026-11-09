@@ -1,4 +1,5 @@
 #include "Font.h"
+#include "skrumi/Unicode.h"
 #include "Builtins.h"
 #include "Graphics.h"
 #include "skrumi/Skrumi.h"
@@ -53,7 +54,15 @@ Fonts& fonts(Call& c) {
     if (!slot) slot = std::make_shared<Fonts>();
     return *slot;
 }
-Surface& surface(Call& c) { return window(c).surface(); }
+Canvases& canvases(Call& c) {
+    auto& slot = c.ctx.getRoot()->canvases;
+    if (!slot) slot = std::make_shared<Canvases>();
+    return *slot;
+}
+Surface& surface(Call& c) {
+    auto& targets = c.ctx.getRoot()->canvases;
+    return targets && targets->selected ? targets->get(targets->selected) : window(c).surface();
+}
 
 // Pictures live apart from the window: they can be loaded before it opens.
 std::vector<std::shared_ptr<Image>>& images() {
@@ -161,10 +170,76 @@ void drawTiles(Call& c) {
         }
     }
 }
+ValueList missingText(Call& c) {
+    int handle = integer(c, 0);
+    Font* font = handle == 0 ? nullptr : &fonts(c).get(handle);
+    ValueList missing;
+    std::vector<std::string> seen;
+    for (const auto& cluster : unicode::graphemes(c.text(1))) {
+        size_t offset = 0;
+        char32_t cp = unicode::next(cluster, offset);
+        bool supported = offset == cluster.size() && (font ? font->supports(cp) : Surface::hasGlyph(cp));
+        if (!supported && std::find(seen.begin(), seen.end(), cluster) == seen.end()) {
+            seen.push_back(cluster); missing.push_back(Value::string(cluster));
+        }
+    }
+    return missing;
+}
 } // namespace
 
 const std::vector<Signature>& signatures() {
     static const std::vector<Signature> result = {
+        {"gfx_canvas_create", "create_canvas", "int", {{"int","width"},{"int","height"}}, "Создать RGB canvas без окна; максимум 32 canvas, 32 миллиона пикселей суммарно.",
+         [](Call& c) { return Value::integer(canvases(c).create(integer(c,0),integer(c,1))); }},
+        {"gfx_canvas_select", "draw_to_canvas", "void", {{"int","canvas"}}, "Выбрать canvas для рисования; 0 возвращает рисование в окно.",
+         [](Call& c) { canvases(c).select(integer(c,0)); return Value(); }},
+        {"gfx_canvas_free", "free_canvas", "void", {{"int","canvas"}}, "Освободить canvas; активная цель сбрасывается на окно.",
+         [](Call& c) { canvases(c).release(integer(c,0)); return Value(); }},
+        {"gfx_canvas_draw", "draw_canvas", "void", {{"int","canvas"},{"int","x"},{"int","y"}}, "Копировать RGB canvas в текущую цель.",
+         [](Call& c) { auto& src = canvases(c).get(integer(c,0)); Image image{src.width(),src.height(),src.pixels()}; for (auto& p : image.pixels) p |= 0xff000000U; surface(c).image(image,0,0,image.width,image.height,integer(c,1),integer(c,2),image.width,image.height,255); return Value(); }},
+        {"gfx_canvas_png", "canvas_png", "string", {{"int","canvas"}}, "PNG-байты canvas без сжатия; можно сохранить через fs_write_atomic.",
+         [](Call& c) { return Value::string(canvases(c).get(integer(c,0)).png()); }},
+        {"gfx_screenshot", "save_screenshot", "void", {{"string","path"}}, "Сохранить RGB framebuffer окна в PNG, без декораций окна.",
+         [](Call& c) { auto bytes = window(c).surface().png(); std::ofstream out(platform::pathFromUtf8(c.text(0)),std::ios::binary); out.write(bytes.data(),static_cast<std::streamsize>(bytes.size())); out.close(); if (!out) fail("cannot save screenshot"); return Value(); }},
+        {"gfx_polygon", "draw_polygon", "void", {{"array","points"},{"int","color"}}, "Заполненный многоугольник: [x,y,x,y,...], 3..4096 вершин, правило even-odd.",
+         [](Call& c) { const auto& values = groups(c,0,2,"points"); if (values.size() < 6 || values.size() > 8192) fail("polygon needs 3..4096 points"); std::vector<std::array<int,2>> points; for (size_t i=0;i<values.size();i+=2) points.push_back({number(values[i]),number(values[i+1])}); surface(c).polygon(points,color(c,1)); return Value(); }},
+        {"gfx_ellipse", "draw_ellipse", "void", {{"int","x"},{"int","y"},{"int","radius_x"},{"int","radius_y"},{"int","color"}}, "Заполненный эллипс с радиусами 0..8192.",
+         [](Call& c) { surface(c).ellipse(integer(c,0),integer(c,1),integer(c,2),integer(c,3),color(c,4)); return Value(); }},
+        {"gfx_gradient", "draw_gradient", "void", {{"int","x"},{"int","y"},{"int","width"},{"int","height"},{"int","from"},{"int","to"},{"bool","vertical"}}, "RGB-градиент; vertical=true сверху вниз, false слева направо.",
+         [](Call& c) { surface(c).gradient(integer(c,0),integer(c,1),integer(c,2),integer(c,3),color(c,4),color(c,5),c.flag(6)); return Value(); }},
+        {"gfx_image_ex", "draw_image_ex", "void", {{"int","image"},{"int","x"},{"int","y"},{"float","scale"},{"float","angle"},{"bool","flip_x"},{"bool","flip_y"},{"int","alpha"}}, "Поворот вокруг центра масштабированной картинки; angle в радианах по часовой стрелке, alpha 0..255.",
+         [](Call& c) { auto& img=picture(c,0); surface(c).imageEx(img,0,0,img.width,img.height,integer(c,1),integer(c,2),c.number(3),c.number(4),c.flag(5),c.flag(6),integer(c,7)); return Value(); }},
+        {"gfx_image_part_ex", "draw_image_part_ex", "void", {{"int","image"},{"int","sx"},{"int","sy"},{"int","sw"},{"int","sh"},{"int","x"},{"int","y"},{"float","scale"},{"float","angle"},{"bool","flip_x"},{"bool","flip_y"},{"int","alpha"}}, "Часть атласа с масштабом, поворотом вокруг центра и отражением; angle в радианах, alpha 0..255.",
+         [](Call& c) { surface(c).imageEx(picture(c,0),integer(c,1),integer(c,2),integer(c,3),integer(c,4),integer(c,5),integer(c,6),c.number(7),c.number(8),c.flag(9),c.flag(10),integer(c,11)); return Value(); }},
+        {"gfx_font_text_alpha", "draw_font_text_alpha", "void", {{"int","font"},{"int","x"},{"int","y"},{"string","text"},{"int","pixels"},{"int","color"},{"int","alpha"}}, "TTF-текст с непрозрачностью alpha 0..255.",
+         [](Call& c) { fonts(c).get(integer(c,0)).draw(surface(c),integer(c,1),integer(c,2),c.text(3),integer(c,4),color(c,5),level(c,6,"alpha")); return Value(); }},
+        {"gfx_circles", "draw_circles", "void", {{"array","circles"}}, "Пакет кругов: [x,y,radius,color,...].",
+         [](Call& c) { auto& s=surface(c); const auto& v=groups(c,0,4,"circles"); for(size_t i=0;i<v.size();i+=4) s.circle(number(v[i]),number(v[i+1]),number(v[i+2]),checkedColor(number(v[i+3]))); return Value(); }},
+        {"gfx_lines", "draw_lines", "void", {{"array","lines"}}, "Пакет линий: [x1,y1,x2,y2,color,...].",
+         [](Call& c) { auto& s=surface(c); const auto& v=groups(c,0,5,"lines"); for(size_t i=0;i<v.size();i+=5) s.line(number(v[i]),number(v[i+1]),number(v[i+2]),number(v[i+3]),checkedColor(number(v[i+4]))); return Value(); }},
+
+        {"gfx_circle_alpha", "draw_circle_alpha", "void", {{"int","x"},{"int","y"},{"int","radius"},{"int","color"},{"int","alpha"}}, "Рисует с прозрачностью alpha 0..255.",
+         [](Call& c) { surface(c).circle(integer(c, 0), integer(c, 1), integer(c, 2), color(c, 3), integer(c, 4)); return Value(); }},
+        {"gfx_line_alpha", "draw_line_alpha", "void", {{"int","x1"},{"int","y1"},{"int","x2"},{"int","y2"},{"int","color"},{"int","alpha"}}, "Рисует с прозрачностью alpha 0..255.",
+         [](Call& c) { surface(c).line(integer(c, 0), integer(c, 1), integer(c, 2), integer(c, 3), color(c, 4), integer(c, 5)); return Value(); }},
+        {"gfx_ring_alpha", "draw_ring_alpha", "void", {{"int","x"},{"int","y"},{"int","radius"},{"int","thickness"},{"int","color"},{"int","alpha"}}, "Рисует с прозрачностью alpha 0..255.",
+         [](Call& c) { surface(c).ring(integer(c, 0), integer(c, 1), integer(c, 2), integer(c, 3), color(c, 4), integer(c, 5)); return Value(); }},
+        {"gfx_text_alpha", "draw_text_alpha", "void", {{"int","x"},{"int","y"},{"string","text"},{"int","scale"},{"int","color"},{"int","alpha"}}, "Рисует с прозрачностью alpha 0..255.",
+         [](Call& c) { surface(c).text(integer(c, 0), integer(c, 1), c.text(2), integer(c, 3), color(c, 4), integer(c, 5)); return Value(); }},
+        {"gfx_font_fallback", "font_with_fallback", "int", {{"int","body"},{"int","fallback"}}, "Новый font handle с цепочкой fallback; исходные handles можно освободить.",
+         [](Call& c) { return Value::integer(fonts(c).withFallback(integer(c, 0), integer(c, 1))); }},
+        {"gfx_text_supported", "text_supported", "bool", {{"int","font"},{"string","text"}}, "Проверка текста без окна: font 0 — встроенный шрифт; составные графемы без shaping считаются неподдержанными.",
+         [](Call& c) { return Value::boolean(missingText(c).empty()); }},
+        {"gfx_text_missing", "text_missing_glyphs", "array", {{"int","font"},{"string","text"}}, "Уникальные неподдержанные графемы; font 0 — встроенный шрифт.",
+         [](Call& c) { return runtime::makeArray(missingText(c)); }},
+        {"gfx_target_fps", "set_target_fps", "void", {{"int","fps"}}, "Ограничение FPS при present_window; 0 — без ограничения, 1..1000.",
+         [](Call& c) { window(c).setTargetFps(integer(c, 0)); return Value(); }},
+        {"gfx_mouse_visible", "set_mouse_visible", "void", {{"bool","visible"}}, "Скрыть/показать системный курсор внутри окна Windows/X11.",
+         [](Call& c) { window(c).setMouseVisible(c.flag(0)); return Value(); }},
+        {"gfx_mouse_captured", "set_mouse_captured", "void", {{"bool","captured"}}, "Захват мыши с относительным движением Windows/X11; автоматически снимается при потере фокуса.",
+         [](Call& c) { window(c).setMouseCaptured(c.flag(0)); return Value(); }},
+        {"gfx_mouse_delta", "mouse_delta", "array", {}, "Относительное движение [dx, dy] за последний window_poll, в пикселях.",
+         [](Call& c) { auto& w = window(c); return runtime::makeArray({Value::integer(w.mouseDeltaX()), Value::integer(w.mouseDeltaY())}); }},
         {"gfx_open", "open_window", "void", {{"int","width"},{"int","height"},{"string","title"}}, "Открыть нативное графическое окно, изменяемое по размеру по умолчанию. Одно окно на интерпретатор, 64..4096 пикселей по каждой оси, не более 8388608 пикселей.",
          [](Call& c) { auto& slot = c.ctx.getRoot()->graphics; if (slot) fail("close the existing window before opening another"); int width = integer(c, 0), height = integer(c, 1);
              bool fullscreen = false;

@@ -83,7 +83,10 @@ Operator operatorOf(const std::string& text) {
         {"-", Operator::Sub}, {"-=", Operator::Sub}, {"*", Operator::Mul}, {"*=", Operator::Mul},
         {"/", Operator::Div}, {"/=", Operator::Div}, {"%", Operator::Mod}, {"%=", Operator::Mod},
         {"==", Operator::Eq}, {"!=", Operator::Ne}, {"<", Operator::Lt}, {"<=", Operator::Le},
-        {">", Operator::Gt}, {">=", Operator::Ge}};
+        {">", Operator::Gt}, {">=", Operator::Ge},
+        {"&", Operator::BitAnd}, {"&=", Operator::BitAnd}, {"|", Operator::BitOr}, {"|=", Operator::BitOr},
+        {"^", Operator::BitXor}, {"^=", Operator::BitXor}, {"<<", Operator::ShiftLeft}, {"<<=", Operator::ShiftLeft},
+        {">>", Operator::ShiftRight}, {">>=", Operator::ShiftRight}};
     for (const auto& entry : operators)
         if (text == entry.first) return entry.second;
     return Operator::Unknown;
@@ -96,6 +99,25 @@ bool operandTruth(const Value& value, const char* side, const std::string& text)
 }
 
 Value binary(Operator op, const std::string& text, const Value& lval, const Value& rval) {
+    if (op >= Operator::BitAnd && op <= Operator::ShiftRight) {
+        if (!lval.isInt() || !rval.isInt())
+            throw std::runtime_error("Type Error: operator '" + text + "' requires int operands");
+        auto l = intArgument(lval, "bitwise operand"), r = intArgument(rval, "bitwise operand");
+        std::uint32_t left = static_cast<std::uint32_t>(l), right = static_cast<std::uint32_t>(r), result = 0;
+        if (op == Operator::BitAnd) result = left & right;
+        else if (op == Operator::BitOr) result = left | right;
+        else if (op == Operator::BitXor) result = left ^ right;
+        else {
+            if (r < 0 || r > 31) throw std::runtime_error("Runtime Error: shift count must be in 0..31");
+            if (op == Operator::ShiftLeft) result = left << r;
+            else {
+                result = left >> r;
+                if (l < 0 && r != 0) result |= (~std::uint32_t(0)) << (32 - r);
+            }
+        }
+        // Explicit two's-complement conversion, without signed shifts or overflow.
+        return Value::integer(result <= 0x7fffffffU ? static_cast<long long>(result) : static_cast<long long>(result) - 0x100000000LL);
+    }
     // Two ints are the common case: arithmetic and comparison without any conversion.
     Value result;
     if (lval.isInt() && rval.isInt() && binaryInts(op, lval.asInt(), rval.asInt(), text, result)) return result;

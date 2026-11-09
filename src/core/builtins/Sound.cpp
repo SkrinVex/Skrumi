@@ -2,6 +2,7 @@
 // Windows plays through PlaySound (winmm); Linux hands the file to the desktop's
 // player (pw-play, paplay or aplay), so a static binary needs no audio library.
 #include "Builtin.h"
+#include "../../audio/Mixer.h"
 #include "skrumi/Platform.h"
 #include <algorithm>
 #include <atomic>
@@ -33,6 +34,11 @@ extern char** environ;
 namespace skrumi::runtime {
 namespace {
 
+audio::Mixer& mixer(Call& c) {
+    auto& slot = c.ctx.getRoot()->mixer;
+    if (!slot) slot = std::make_shared<audio::Mixer>();
+    return *slot;
+}
 // 16-bit mono PCM at 44100 Hz: a sine with 10 ms fades so it starts and ends without a click.
 std::vector<uint8_t> toneWav(double frequency, long long milliseconds, double volume) {
     const uint32_t rate = 44100;
@@ -195,13 +201,35 @@ void stopAll() {
 
 void addSoundBuiltins(std::vector<Builtin>& out) {
     auto add = [&](BuiltinSpec spec, Handler handler) { out.push_back({std::move(spec), handler}); };
+    add({"sound_play_ex", "int", {{"string", "path"},{"int", "channel"},{"float", "volume"},{"bool", "loop"}}, 4, false, "sound", "Потоковое воспроизведение WAV/MP3/FLAC/OGG; отдельный handle, канал 0..2, volume 0..1. Ошибка устройства — Audio Error."},
+        [](Call& c) { return integer(mixer(c).play(c.text(0), static_cast<int>(c.integer(1)), c.number(2), c.flag(3))); });
+    add({"sound_stop_handle", "void", {{"int", "handle"}}, 1, false, "sound", "Остановить handle; повторный вызов безопасен."},
+        [](Call& c) { if (c.ctx.getRoot()->mixer) c.ctx.getRoot()->mixer->stop(static_cast<int>(c.integer(0))); return nothing(); });
+    add({"sound_pause", "void", {{"int", "handle"},{"bool", "paused"}}, 2, false, "sound", "Пауза или продолжение отдельного звука."},
+        [](Call& c) { mixer(c).pause(static_cast<int>(c.integer(0)), c.flag(1)); return nothing(); });
+    add({"sound_is_playing", "bool", {{"int", "handle"}}, 1, false, "sound", "Играет ли handle сейчас; false для завершённого или остановленного."},
+        [](Call& c) { return boolean(c.ctx.getRoot()->mixer && c.ctx.getRoot()->mixer->playing(static_cast<int>(c.integer(0)))); });
+    add({"sound_volume", "void", {{"int", "handle"},{"float", "volume"}}, 2, false, "sound", "Громкость отдельного звука 0..1."},
+        [](Call& c) { mixer(c).volume(static_cast<int>(c.integer(0)), c.number(1)); return nothing(); });
+    add({"sound_pan", "void", {{"int", "handle"},{"float", "pan"}}, 2, false, "sound", "Панорама -1..1."},
+        [](Call& c) { mixer(c).pan(static_cast<int>(c.integer(0)), c.number(1)); return nothing(); });
+    add({"sound_channel_volume", "void", {{"int", "channel"},{"float", "volume"}}, 2, false, "sound", "Громкость канала 0..1."},
+        [](Call& c) { mixer(c).channelVolume(static_cast<int>(c.integer(0)), c.number(1)); return nothing(); });
+    add({"sound_master_volume", "void", {{"float", "volume"}}, 1, false, "sound", "Общая громкость микшера 0..1."},
+        [](Call& c) { mixer(c).masterVolume(c.number(0)); return nothing(); });
+    add({"sound_fade_out", "void", {{"int", "handle"},{"int", "milliseconds"}}, 2, false, "sound", "Плавно снизить громкость до нуля и остановить звук."},
+        [](Call& c) { mixer(c).fadeOut(static_cast<int>(c.integer(0)), static_cast<int>(c.integer(1))); return nothing(); });
     add({"sound_play", "bool", {{"string", "path"}}, 1, false, "sound",
          "Начинает проигрывать звуковой файл WAV и сразу возвращает управление. `false`, если звук не удалось "
          "запустить: нет файла, звуковой системы или проигрывателя."},
         [](Call& c) {
             std::error_code missing;
             if (!std::filesystem::is_regular_file(platform::pathFromUtf8(c.text(0)), missing)) return boolean(false);
+#ifdef _WIN32
+            try { mixer(c).play(c.text(0), 0, 1, false); return boolean(true); } catch (const std::exception&) { return boolean(false); }
+#else
             return boolean(playFile(c.text(0)));
+#endif
         });
     add({"sound_tone", "bool", {{"float", "frequency"}, {"int", "milliseconds"}, {"float", "volume"}}, 3, false, "sound",
          "Проигрывает тон: частота 20..20000 Гц, длительность 1..60000 мс, громкость 0..1. Не ждёт окончания."},
@@ -211,10 +239,15 @@ void addSoundBuiltins(std::vector<Builtin>& out) {
             if (frequency < 20 || frequency > 20000) throw std::runtime_error("Runtime Error: tone frequency must be 20..20000 Hz");
             if (milliseconds < 1 || milliseconds > 60000) throw std::runtime_error("Runtime Error: tone length must be 1..60000 ms");
             if (volume < 0 || volume > 1) throw std::runtime_error("Runtime Error: tone volume must be 0..1");
+#ifdef _WIN32
+            try { mixer(c).playMemory(toneWav(frequency, milliseconds, volume), 0, 1, false); return boolean(true); } catch (const std::exception&) { return boolean(false); }
+#else
             return boolean(playTone(toneWav(frequency, milliseconds, volume)));
+#endif
         });
     add({"sound_stop", "void", {}, 0, false, "sound", "Останавливает все звуки, запущенные программой."},
-        [](Call&) {
+        [](Call& c) {
+            if (c.ctx.getRoot()->mixer) c.ctx.getRoot()->mixer->stopAll();
             stopAll();
             return nothing();
         });

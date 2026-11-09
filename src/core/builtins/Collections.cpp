@@ -75,6 +75,12 @@ void sortBy(Call& call, ValueList& items, const Value& before) {
 void addCollectionBuiltins(std::vector<Builtin>& out) {
     auto add = [&](BuiltinSpec spec, Handler handler) { out.push_back({std::move(spec), handler}); };
 
+    add({"array_unique", "array", {{"array", "items"}}, 1, false, "arrays", "Новый массив уникальных элементов в порядке первого появления; сравнение как array_index_of."},
+        [](Call& c) { ValueList values; for (const auto& v : c.array(0)) if (std::none_of(values.begin(), values.end(), [&](const Value& other) { return sameValue(v, other); })) values.push_back(v); return makeArray(std::move(values)); });
+    add({"array_chunk", "array", {{"array", "items"}, {"int", "length"}}, 2, false, "arrays", "Новый массив групп не больше length элементов; length > 0."},
+        [](Call& c) { size_t n = c.amount(1, size_t(1) << 26); if (!n) throw std::runtime_error("Runtime Error: chunk length must be positive"); ValueList groups; const auto& items = c.array(0); for (size_t i = 0; i < items.size(); i += n) groups.push_back(makeArray(ValueList(items.begin()+i, items.begin()+std::min(i+n, items.size())))); return makeArray(std::move(groups)); });
+    add({"array_flatten", "array", {{"array", "items"}}, 1, false, "arrays", "Новый массив: раскрывает один уровень вложенных массивов; не рекурсивно, в том числе для циклов."},
+        [](Call& c) { ValueList values; for (const auto& item : c.array(0)) { if (item.is(Value::Kind::Array)) { const auto& nested = item.ref()->items; if (nested.size() > (size_t(1) << 26) - values.size()) throw std::runtime_error("Runtime Error: flattened array is too large"); values.insert(values.end(), nested.begin(), nested.end()); } else { if (values.size() >= (size_t(1) << 26)) throw std::runtime_error("Runtime Error: flattened array is too large"); values.push_back(item); } } return makeArray(std::move(values)); });
     add({"array_sort", "void", {{"array", "items"}, {"func", "before"}}, 1, false, "arrays",
          "Сортирует массив по возрастанию на месте: числа по значению, строки по алфавиту (по байтам UTF-8). "
          "Массив из чисел и строк вперемешку — ошибка выполнения. С функцией `before(a, b)`, которая "

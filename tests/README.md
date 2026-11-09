@@ -36,7 +36,7 @@ ctest --test-dir build -C Release --output-on-failure
 | `unit_web` | `tests/unit/test_web.cpp` | шаблоны, `json_set`, URL/HTML-кодирование, формы, multipart, cookies, маршруты с параметрами, статика и защита от `..`, 404/405, CORS — без сети |
 | `web_server_example` | `tests/test_web_server.py` | сайт `examples/website` по настоящему HTTP: шаблоны, форма, cookie, редирект, загрузка и скачивание, статика, HEAD, журнал запросов |
 | `lsp_project` | `tests/test_lsp_project.py` | проект из нескольких файлов в папке с кириллицей: соседние файлы видят друг друга, независимые программы — нет, переход к определению в другой файл, обновление диагностики после правки |
-| `lsp_catalog` | `tests/test_lsp_catalog.py` | настоящий `skrumi-lsp`: completion, hover и signatureHelp всех встроенных функций и всех функций 17 модулей |
+| `lsp_catalog` | `tests/test_lsp_catalog.py` | настоящий `skrumi-lsp`: completion, hover и signatureHelp всех встроенных функций и всех функций 18 модулей |
 | `packaging_versions` | `tests/test_versions.py` | манифесты редакторов совпадают с `VERSION`, номер версии не продублирован в документации, VSIX собирается правильно, подсветка синхронизирована с каталогом функций |
 | `standalone_*` | `tests/standalone/` | упаковка и запуск приложений в чистом каталоге (см. ниже) |
 
@@ -104,7 +104,7 @@ Windows использует встроенные Win32/GDI без внешне�
 ## LSP и каталоги редакторов
 
 `lsp_catalog` запускает настоящий `skrumi-lsp` по stdio в чистом каталоге без
-DISPLAY и stdlib на диске. Проверяет completion/hover/signatureHelp всех 17
+DISPLAY и stdlib на диске. Проверяет completion/hover/signatureHelp всех 18
 std-модулей, каталог встроенных функций, справку ключевых слов и операторов,
 неполные вызовы, вложенные выражения, кавычки, комментарии, кириллицу и emoji.
 Функции graphics/HTTP/filesystem при этом не выполняются.

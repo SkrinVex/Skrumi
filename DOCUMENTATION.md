@@ -60,12 +60,12 @@ skrumi build hello.skm      # собрать самостоятельный ис
 ## 2. Синтаксис
 
 * Каждая инструкция заканчивается точкой с запятой `;`, блоки заключаются в `{ ... }`.
-* Комментарий начинается с `//` и идёт до конца строки. Блочных комментариев нет.
+* Комментарии: `//` до конца строки и невложенные `/* ... */`. Незакрытый блок — ошибка на строке начала. UTF-8 BOM в начале исходника допускается.
 * Идентификаторы состоят из латинских букв, цифр и `_` и не начинаются с цифры:
   `user_name`, `score2`. Кириллица допустима в строках и комментариях, но не в именах.
 * Тело `if`, `while`, `for` и функции всегда пишется в фигурных скобках.
 * Числа: целые `42` и дробные `3.14` (цифра обязательна по обе стороны точки).
-  Шестнадцатеричной и экспоненциальной записи нет.
+  Также доступны `0xFF8800`, `0b1010`, `1_000_000`, `1.5e3` и `1E-3`. Разделитель `_` допускается только между цифрами.
 * Строки пишутся в двойных кавычках. Соседние строковые литералы склеиваются,
   поэтому длинный текст можно разбить на несколько строк исходника.
 * Внутри строки `${выражение}` подставляет значение выражения так, как его показывает
@@ -288,15 +288,21 @@ print(score, history);
 
 | Приоритет | Операторы | Описание |
 |---|---|---|
-| 1 (высший) | `-x`, `!x`, `x++`, `x--`, `a[i]`, `a.b`, `a?.b`, вызов `f()` | унарные, постфиксные, индекс, поле |
+| 1 (высший) | `-x`, `!x`, `~x`, `x++`, `x--`, индекс, поле, вызов | унарные и постфиксные |
 | 2 | `*`, `/`, `%` | умножение, деление, остаток |
-| 3 | `+`, `-` | сложение и склейка строк, вычитание |
-| 4 | `==`, `!=`, `<`, `>`, `<=`, `>=` | сравнение |
-| 5 | `&&` | логическое И |
-| 6 | `\|\|` | логическое ИЛИ |
-| 7 (низший) | `??` | значение по умолчанию вместо `null`, см. [null](#null-и-типы-t) |
+| 3 | `+`, `-` | сложение, вычитание |
+| 4 | `<<`, `>>` | сдвиги |
+| 5 | `<`, `>`, `<=`, `>=` | порядок |
+| 6 | `==`, `!=` | равенство |
+| 7 | `&` | битовое И |
+| 8 | `^` | битовое исключающее ИЛИ |
+| 9 | `\|` | битовое ИЛИ |
+| 10 | `&&` | логическое И |
+| 11 | `\|\|` | логическое ИЛИ |
+| 12 | `condition ? yes : no` | ленивый выбор, справа налево |
+| 13 (низший) | `??` | значение вместо null |
 
-Присваивания — отдельные инструкции: `=`, `+=`, `-=`, `*=`, `/=`, `%=`. Они же
+Присваивания — отдельные инструкции: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `&=`, `|=`, `^=`, `<<=`, `>>=`. Они же
 работают для элементов массива: `items[i] += 1;`.
 
 * **Арифметика.** Если хотя бы один операнд `float`, результат `float`, иначе `int`.
@@ -319,7 +325,9 @@ if (divisor != 0 && total / divisor > 1) {
 ```
 
 * **`i++` и `i--`** увеличивают или уменьшают переменную `int` или `float` на 1 и
-  возвращают старое значение.
+  возвращают старое значение. Поддерживаются поля и элементы: `u.hp++`,
+  `items[i++]++`, `map["k"]--`, `this.hp++`. Каждый индекс вычисляется один раз.
+  Префиксные `++i`/`--i` пока отсутствуют; используйте постфиксную форму или `+= 1`.
 
 ---
 
@@ -1053,8 +1061,10 @@ assert_equal(type_of(Direction.North), "Direction");
 
 ### Строки
 
-Позиции и длины считаются в символах, поэтому кириллица и emoji работают так же,
-как латиница. Исключение — `size(text)`, она считает байты UTF-8.
+**`size(text)` считает байты UTF-8; `str_length(text)` — кодовые точки;
+`grapheme_length(text)` — графемные кластеры.** Семья `👨‍👩‍👧‍👦` занимает
+25 байт, 7 кодовых точек и 1 графему. `str_substring` может разрезать составной
+эмодзи; для видимых символов используйте `grapheme_substring`. См. [шрифты и Unicode](docs/FONTS.md).
 
 | Функция | Описание |
 |---|---|
@@ -1546,8 +1556,8 @@ reset_color();
 | `beep(float frequency, int milliseconds) -> bool` | тон средней громкости |
 | `stop_sounds() -> void` | останавливает все звуки программы |
 
-В Windows звук идёт через системный `PlaySound` (одновременно звучит один звук, новый
-прерывает прежний). В Linux файл получает проигрыватель рабочего стола — `pw-play`,
+В Windows `play_sound` и `play_tone` используют нативный микшер, поэтому звуки
+накладываются. В Linux прежний `play_sound` сохраняет проигрыватель рабочего стола — `pw-play`,
 `paplay` или `aplay`, какой найдётся, — поэтому звуки могут накладываться; свой
 проигрыватель задаёт переменная окружения `SKRUMI_SOUND_PLAYER`.
 
@@ -2714,7 +2724,10 @@ runtime; размер 8..96 пикселей, x/y обозначают верх 
 размера и handle — `Graphics Error`. Метрики и сглаживание одинаковы в
 Windows/Linux/Android/Web благодаря статически связанному FreeType 2.14.1.
 Нет зависимости от установленных в ОС шрифтов. Поддерживаются Unicode glyphs
-и переводы строк; shaping, kerning и bidi в этом API не реализованы.
+и переводы строк; глифы монохромные. Shaping, kerning, bidi, цветные эмодзи,
+сборка ZWJ-последовательностей и флагов в этом API не реализованы. Для fallback
+есть `font_with_fallback`; возможности текста проверяются до рисования через
+`text_supported`. Подробности и таблица уровней — [FONTS.md](docs/FONTS.md).
 
 `using ui;`: `void ui_set_font(int font, int pixels)` задаёт шрифт кнопок, полей,
 флажков и диалогов. Handle 0 возвращает прежний пиксельный рендерер.
@@ -2812,3 +2825,165 @@ while (window_poll()) {
     present_window();
 }
 ```
+
+
+## Игровые и проектные API
+
+Тернарник требует `bool` и выполняет только выбранную ветвь. `check` отклоняет
+известные несовместимые типы ветвей; известные `int`/`float` расширяются до `float`.
+Для динамических значений тип проверяется при использовании результата.
+Операторы `& | ^ ~ << >>` требуют `int`. Результат — 32-битная маска в дополнительном
+коде: `1 << 31` равно `-2147483648`; правый сдвиг знаковый. Сдвиг вне `0..31` — ошибка.
+Hex/binary литералы подчиняются диапазону `int`; `-0x80000000` допустимо.
+
+<!-- skrumi-run -->
+```cpp
+bool alive = true;
+int color = alive ? 0x00FF00 : 0xFF0000;
+int flags = 0b0010;
+flags |= 1 << 3;
+array<int> counters = [1];
+int old = counters[0]++;
+assert_equal(old, 1);
+assert_equal(counters[0], 2);
+assert_equal(flags, 10);
+```
+
+| API | Контракт |
+|---|---|
+| `byte_size(text)` | Байты UTF-8, синоним `size` для строк |
+| `char_length(text)` | Кодовые точки, синоним `str_length` |
+| `grapheme_length(text)` | Число расширенных графем UAX #29, Unicode 16 |
+| `grapheme_split(text)` | Новый массив графем |
+| `grapheme_substring(text, start, length)` | Подстрока по графемам; length можно опустить; индексы неотрицательны, выход за конец обрезается |
+| `random_seed(seed)` | Состояние MT19937 принадлежит интерпретатору; одинаковый seed и порядок вызовов дают одинаковые результаты Windows/Linux |
+| `shuffle(items)`, `array_shuffle(items)` | Новая перемешанная копия; исходный массив сохраняется |
+| `array_unique(items)` | Первые вхождения, порядок сохраняется; сравнение как array_index_of |
+| `array_chunk(items, length)` | Группы указанной положительной длины; последняя может быть короче |
+| `array_flatten(items)` | Раскрытие ровно одного уровня, без рекурсивного обхода циклов |
+| `assert_close(actual, expected, epsilon)` | Абсолютная погрешность; конечные числа и epsilon >= 0 |
+| `clock_ms64()` | Монотонные миллисекунды как float; целые миллисекунды точны до 2^53. Прежний clock_ms возвращает int и переполняется примерно через 24,8 дня |
+| `user_data_dir()` | Создаёт и возвращает каталог сохранений: LOCALAPPDATA/Skrumi, XDG_DATA_HOME/skrumi или ~/.local/share/skrumi; на Android — private files; в Web — ошибка |
+
+`using math;`: `smoothstep(edge0, edge1, value)`, `wrap(value, low, high)`,
+`move_toward(value, target, delta)`, `angle_difference(from, to)` (радианы),
+`random_range(low, high)` дополняют существующие `lerp`, `hypot` и `clamp01`.
+
+`using graphics;`:
+
+| API | Контракт |
+|---|---|
+| `draw_circle_alpha(x, y, radius, color, alpha)` / `gfx_circle_alpha(...)` | Заполненный круг, alpha 0..255 |
+| `draw_line_alpha(x1, y1, x2, y2, color, alpha)` / `gfx_line_alpha(...)` | Линия, alpha 0..255 |
+| `draw_ring_alpha(x, y, radius, thickness, color, alpha)` / `gfx_ring_alpha(...)` | Кольцо, alpha 0..255 |
+| `draw_text_alpha(x, y, text, scale, color, alpha)` / `gfx_text_alpha(...)` | Пиксельный текст с альфой |
+| `load_font_file(path)` | Обёртка read_file + load_font; ошибка чтения не превращается в успех |
+| `font_with_fallback(body, fallback)` / `gfx_font_fallback(...)` | Новый handle, не более 32 разных faces; цепочка удерживает исходные faces после free_font |
+| `text_supported(font, text)` / `gfx_text_supported(...)` | Проверка без окна; font 0 — встроенный. Составная графема, требующая shaping, считается неподдержанной |
+| `text_missing_glyphs(font, text)` / `gfx_text_missing(...)` | Уникальные неподдержанные графемы в порядке появления |
+| `text_height(scale)` | Высота ячейки пиксельного шрифта, 9 × scale |
+| `set_target_fps(fps)` / `gfx_target_fps(...)` | Ограничение в present_window, 0 — без ограничения; допустимо 1..1000 |
+| `set_mouse_visible(visible)` / `gfx_mouse_visible(...)` | Видимость курсора внутри окна Windows/X11 |
+| `set_mouse_captured(captured)` / `gfx_mouse_captured(...)` | Захват в фокусированном окне Windows/X11, снимается при потере фокуса |
+| `mouse_delta()` / `gfx_mouse_delta()` | [dx, dy] за последний window_poll; не зависит от количества чтений |
+
+`using sound;`: для нового микшера каналы `SFX=0`, `MUSIC=1`, `UI=2`.
+Аргументы позиционные: named arguments пока отсутствуют.
+
+| API | Контракт |
+|---|---|
+| `play_sound_ex(path, channel, volume, loop)` / `sound_play_ex(...)` | Новый handle; потоковое WAV, MP3, FLAC, OGG/Vorbis; до 128 одновременно активных звуков |
+| `stop_sound(handle)` / `sound_stop_handle(...)` | Остановка отдельного звука; повторная остановка безопасна |
+| `pause_sound(handle)`, `resume_sound(handle)` / `sound_pause(handle, paused)` | Пауза и продолжение |
+| `sound_playing(handle)` / `sound_is_playing(...)` | false для завершённых и остановленных звуков |
+| `set_sound_volume(handle, volume)` / `sound_volume(...)` | Громкость 0..1 |
+| `set_sound_pan(handle, pan)` / `sound_pan(...)` | Панорама -1..1 |
+| `set_channel_volume(channel, volume)` / `sound_channel_volume(...)` | Громкость канала 0..1 |
+| `set_master_volume(volume)` / `sound_master_volume(...)` | Громкость микшера 0..1 |
+| `fade_out(handle, milliseconds)` / `sound_fade_out(...)` | Затухание с остановкой, 0..86400000 мс |
+
+Микшер работает нативно Windows/Linux/Android; Web сообщает Audio Error. При
+отсутствии устройства новый API выдаёт ошибку. Прежний play_sound продолжает
+возвращать bool; на Linux сохраняется SKRUMI_SOUND_PLAYER, на Android — MediaPlayer.
+stop_sounds останавливает оба пути текущего runtime. Завершённые handles могут
+освобождаться при следующем запуске звука; сохраняйте handles активных звуков.
+
+### using game;
+
+`Vec2(x,y)` предоставляет `length()`, `normalized()`, `plus(other)`, `scaled(factor)`.
+`Rect(x,y,width,height)` и `Circle(x,y,radius)` используются в
+`circles_collide(a,b)`, `rects_collide(a,b)`, `circle_rect_collide(circle,rect)`;
+касание границ считается столкновением. `Camera2D(x,y,zoom)` предоставляет
+`world_to_screen(position)`, `screen_to_world(position)`, `follow(target,speed,delta)`.
+`Timer` — `start(seconds)`, `update(delta)` (true только при переходе к нулю),
+`ready()`. `Interval(period)` — `update(delta)` возвращает число истёкших периодов
+с сохранением остатка. `Tween(from,to,duration)` — `update(delta)` и `finished()`.
+Все длительности — секунды, углы — радианы.
+
+`particle_pool(capacity)` заранее выделяет частицы. `spawn_particle(particles,x,y,vx,vy,life,color,radius)`
+возвращает false при заполнении. `update_particles(particles,delta)` работает без окна;
+`draw_particles(particles)` рисует затухающие круги. `Particle` хранит состояние частицы.
+`save_path(name)` запрещает разделители пути; `save_json(name,value)` атомарно пишет JSON,
+`load_json(name)` читает его с ошибкой при отсутствии/повреждении файла. Для разных игр
+используйте свой префикс имени, например moon-forest-highscore.json.
+
+Проект: `skrumi init game`, `skrumi run game`, `skrumi check --project`,
+`skrumi build game --force`. Манифест и миграция: [PROJECTS.md](docs/PROJECTS.md).
+Практический игровой цикл: [GAME_DEVELOPMENT.md](docs/GAME_DEVELOPMENT.md).
+
+### Дополнительное рисование и canvas
+
+| API | Поведение |
+|---|---|
+| `create_canvas(int width,int height)` / `gfx_canvas_create(...)` | Создать RGB canvas без окна; максимум 32 canvas, 32 миллиона пикселей суммарно. |
+| `draw_to_canvas(int canvas)` / `gfx_canvas_select(...)` | Выбрать canvas для рисования; 0 возвращает рисование в окно. |
+| `free_canvas(int canvas)` / `gfx_canvas_free(...)` | Освободить canvas; активная цель сбрасывается на окно. |
+| `draw_canvas(int canvas,int x,int y)` / `gfx_canvas_draw(...)` | Копировать RGB canvas в текущую цель. |
+| `canvas_png(int canvas)` / `gfx_canvas_png(...)` | PNG-байты canvas без сжатия; можно сохранить через fs_write_atomic. |
+| `save_screenshot(string path)` / `gfx_screenshot(...)` | Сохранить RGB framebuffer окна в PNG, без декораций окна. |
+| `draw_polygon(array points,int color)` / `gfx_polygon(...)` | Заполненный многоугольник: [x,y,x,y,...], 3..4096 вершин, правило even-odd. |
+| `draw_ellipse(int x,int y,int radius_x,int radius_y,int color)` / `gfx_ellipse(...)` | Заполненный эллипс с радиусами 0..8192. |
+| `draw_gradient(int x,int y,int width,int height,int from,int to,bool vertical)` / `gfx_gradient(...)` | RGB-градиент; vertical=true сверху вниз, false слева направо. |
+| `draw_image_ex(int image,int x,int y,float scale,float angle,bool flip_x,bool flip_y,int alpha)` / `gfx_image_ex(...)` | Поворот вокруг центра масштабированной картинки; angle в радианах по часовой стрелке, alpha 0..255. |
+| `draw_image_part_ex(int image,int sx,int sy,int sw,int sh,int x,int y,float scale,float angle,bool flip_x,bool flip_y,int alpha)` / `gfx_image_part_ex(...)` | Часть атласа с масштабом, поворотом вокруг центра и отражением; angle в радианах, alpha 0..255. |
+| `draw_font_text_alpha(int font,int x,int y,string text,int pixels,int color,int alpha)` / `gfx_font_text_alpha(...)` | TTF-текст с непрозрачностью alpha 0..255. |
+| `draw_circles(array circles)` / `gfx_circles(...)` | Пакет кругов: [x,y,radius,color,...]. |
+| `draw_lines(array lines)` / `gfx_lines(...)` | Пакет линий: [x1,y1,x2,y2,color,...]. |
+
+| Вспомогательный API graphics | Назначение |
+|---|---|
+| `draw_triangle(x1,y1,x2,y2,x3,y3,color)` | Заполненный треугольник |
+| `draw_text_aligned(x,y,text,scale,color,align)` | Привязка left/center/right к x |
+| `wrap_bitmap_text(text,width,scale)` | Перенос по графемам, без разделения составного символа |
+| `draw_text_wrapped(x,y,text,width,scale,color)` | Рисование перенесённого текста |
+| `text_ellipsis(text,width,scale)` | Однострочная обрезка с … |
+| `draw_icon(atlas,index,x,y,frame_width,frame_height,scale)` | Иконка из равномерного PNG-атласа |
+| `draw_image_nine_slice(image,x,y,width,height,border)` | Панель с нерастягиваемой толщиной рамки |
+
+Canvas хранит непрозрачный RGB-фон; alpha-примитивы смешиваются с этим фоном.
+Это цель рисования для миникарт, кэширования сцен и headless-тестов, а не RGBA-слой.
+`draw_to_canvas(0)` возвращает окно, `window_width/height` всегда относятся к окну.
+Окно не требуется для create_canvas, рисования в canvas и canvas_png.
+У canvas собственная clip-область. `canvas_png` и `save_screenshot` используют PNG
+без потерь со stored-DEFLATE: файлы больше сжатого PNG, но не требуют кодека ОС.
+`draw_image_ex` сохраняет семантику x/y как левого верхнего угла до вращения,
+вращает вокруг центра и использует nearest-neighbor. Угол положителен по часовой стрелке.
+
+<!-- skrumi-run -->
+```cpp
+using graphics;
+int canvas = create_canvas(32, 32);
+draw_to_canvas(canvas);
+draw_gradient(0, 0, 32, 32, 0x102040, 0x4080A0, true);
+draw_triangle(4, 24, 16, 4, 28, 24, 0xFFFFFF);
+int picture = decode_image(canvas_png(canvas));
+assert_equal(image_width(picture), 32);
+free_image(picture);
+free_canvas(canvas);
+assert_equal(wrap_bitmap_text("abcd", 11, 1), "ab\ncd");
+assert_equal(text_ellipsis("abcdef", 17, 1), "ab…");
+```
+
+Практические руководства: [проекты](docs/PROJECTS.md),
+[шрифты и эмодзи](docs/FONTS.md), [игры](docs/GAME_DEVELOPMENT.md),
+[звук](docs/AUDIO.md), [диагностики и отличия от C/JS](docs/DIAGNOSTICS.md).

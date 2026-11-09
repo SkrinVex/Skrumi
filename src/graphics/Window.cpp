@@ -143,6 +143,9 @@ struct Window::Native {
         }
         if (!self) return DefWindowProcW(handle, message, wparam, lparam);
         switch (message) {
+            case WM_SETCURSOR:
+                if (LOWORD(lparam) == HTCLIENT) { SetCursor(self->owner.mouseVisible() ? LoadCursorW(nullptr, IDC_ARROW) : nullptr); return TRUE; }
+                break;
             case WM_CLOSE: self->owner.closeEvent(); return 0;
             case WM_DESTROY: self->owner.destroyedEvent(); return 0;
             case WM_SETFOCUS: self->owner.focusEvent(true); return 0;
@@ -865,8 +868,13 @@ Window::Window(int width, int height, const std::string& title) : surface_(width
     if (title.empty() || title.size() > 4096 || title.find('\0') != std::string::npos) fail("window title must contain 1..4096 bytes without NUL");
     native_->open(title);
 }
-Window::~Window() = default;
+Window::~Window() {
+#ifdef _WIN32
+    if (mouseCaptured_) ClipCursor(nullptr);
+#endif
+}
 bool Window::poll() {
+    mouseDeltaX_ = mouseDeltaY_ = 0;
     pressed_.fill(false);
     repeated_.fill(false);
     text_.clear();
@@ -883,11 +891,93 @@ bool Window::poll() {
         applySize(pendingWidth_, pendingHeight_);
         pendingWidth_ = pendingHeight_ = 0;
     }
+    if (mouseCaptured_ && focused_) centerMouse();
     surface_.resetClip();
     ui_.beginFrame(*this);
     return open_;
 }
-void Window::present() { if (open_) native_->present(); }
+void Window::setTargetFps(int fps) {
+    if (fps < 0 || fps > 1000) fail("target FPS must be 0 (unlimited) or 1..1000");
+    targetFps_ = fps; nextFrame_ = {};
+}
+void Window::present() {
+    if (!open_) return;
+    native_->present();
+    if (!targetFps_) return;
+    auto now = std::chrono::steady_clock::now();
+    auto interval = std::chrono::nanoseconds(1000000000LL / targetFps_);
+    if (nextFrame_.time_since_epoch().count() == 0 || now > nextFrame_ + interval) nextFrame_ = now + interval;
+    if (nextFrame_ > now) {
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(nextFrame_ - now).count();
+        if (ms > 0) platform::pause(ms);
+#ifndef __EMSCRIPTEN__
+        std::this_thread::sleep_until(nextFrame_);
+#endif
+    }
+    nextFrame_ += interval;
+}
+void Window::setMouseVisible(bool visible) {
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    (void)visible; fail("mouse visibility is currently supported on Windows and X11");
+#elif defined(_WIN32)
+    mouseVisible_ = visible;
+    SetCursor(visible ? LoadCursorW(nullptr, IDC_ARROW) : nullptr);
+#else
+    auto* c = native_->connection;
+    uint32_t cursor = XCB_NONE;
+    if (!visible) {
+        auto pixmap = xcb_generate_id(c), gc = xcb_generate_id(c);
+        cursor = xcb_generate_id(c);
+        xcb_create_pixmap(c, 1, pixmap, native_->window, 1, 1);
+        uint32_t zero = 0;
+        xcb_create_gc(c, gc, pixmap, XCB_GC_FOREGROUND, &zero);
+        xcb_rectangle_t rect{0,0,1,1}; xcb_poly_fill_rectangle(c, pixmap, gc, 1, &rect);
+        xcb_create_cursor(c, cursor, pixmap, pixmap, 0,0,0,0,0,0,0,0);
+        xcb_free_gc(c, gc); xcb_free_pixmap(c, pixmap);
+    }
+    xcb_change_window_attributes(c, native_->window, XCB_CW_CURSOR, &cursor);
+    if (cursor != XCB_NONE) xcb_free_cursor(c, cursor);
+    xcb_flush(c); mouseVisible_ = visible;
+#endif
+}
+void Window::centerMouse() {
+    int x = surface_.width()/2, y = surface_.height()/2;
+#ifdef _WIN32
+    POINT point{x,y}; ClientToScreen(native_->hwnd, &point); SetCursorPos(point.x, point.y);
+#elif !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+    xcb_warp_pointer(native_->connection, XCB_NONE, native_->window, 0,0,0,0, static_cast<int16_t>(x), static_cast<int16_t>(y));
+    xcb_flush(native_->connection);
+#endif
+    mouseX_ = x; mouseY_ = y; mouseKnown_ = true;
+}
+void Window::setMouseCaptured(bool captured) {
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__)
+    (void)captured; fail("mouse capture is currently supported on Windows and X11");
+#else
+    if (captured && !focused_) fail("mouse capture requires a focused window");
+#ifdef _WIN32
+    if (captured) {
+        RECT rect{}; GetClientRect(native_->hwnd, &rect);
+        POINT a{rect.left,rect.top}, b{rect.right,rect.bottom};
+        ClientToScreen(native_->hwnd, &a); ClientToScreen(native_->hwnd, &b);
+        rect = {a.x,a.y,b.x,b.y}; if (!ClipCursor(&rect)) fail("cannot capture mouse");
+    } else ClipCursor(nullptr);
+#else
+    if (captured) {
+        auto cookie = xcb_grab_pointer(native_->connection, 1, native_->window,
+            XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE,
+            XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, native_->window, XCB_NONE, XCB_CURRENT_TIME);
+        auto* reply = xcb_grab_pointer_reply(native_->connection, cookie, nullptr);
+        bool ok = reply && reply->status == XCB_GRAB_STATUS_SUCCESS;
+        std::free(reply); if (!ok) fail("cannot capture mouse");
+    } else xcb_ungrab_pointer(native_->connection, XCB_CURRENT_TIME);
+    xcb_flush(native_->connection);
+#endif
+    mouseCaptured_ = captured;
+    if (captured) centerMouse();
+    mouseDeltaX_ = mouseDeltaY_ = 0;
+#endif
+}
 void Window::applySize(int width, int height) {
     width = std::clamp(width, 64, 4096);
     height = std::clamp(height, 64, 4096);
@@ -968,7 +1058,12 @@ void Window::keyEvent(int key, bool down) {
     }
     down_[key] = down;
 }
-void Window::focusEvent(bool focused) { focused_ = focused; down_.fill(false); pressed_.fill(false); repeated_.fill(false); }
+void Window::focusEvent(bool focused) {
+    if (!focused && mouseCaptured_) setMouseCaptured(false);
+    focused_ = focused; mouseKnown_ = false;
+    mouseDeltaX_ = mouseDeltaY_ = 0;
+    down_.fill(false); pressed_.fill(false); repeated_.fill(false);
+}
 int Window::keyCode(const std::string& key) {
     if (key.size() == 1) {
         unsigned char c = static_cast<unsigned char>(key[0]);

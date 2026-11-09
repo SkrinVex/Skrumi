@@ -4,6 +4,7 @@
 #include <iterator>
 #include <iostream>
 #include <climits>
+#include <algorithm>
 #define CHECK(c) do { if (!(c)) { std::cerr << "FAIL " #c << ':' << __LINE__ << '\n'; return 1; } } while (0)
 template<class F> bool rejects(F action) { try { action(); } catch (const std::exception&) { return true; } return false; }
 int main(int argc, char** argv) {
@@ -43,5 +44,19 @@ int main(int argc, char** argv) {
     fonts.release(handle);
     CHECK(rejects([&] { fonts.get(handle); }));
     CHECK(rejects([&] { fonts.release(handle); }));
+    const int body = fonts.load(bytes), fallback = fonts.load(bytes);
+    const int chain = fonts.withFallback(body, fallback);
+    const int expectedWidth = fonts.get(body).width("Привет", 24);
+    CHECK(fonts.get(chain).supports(U'Ж'));
+    CHECK(!fonts.get(chain).supports(U'\U0010FFFF'));
+    fonts.release(body); fonts.release(fallback);
+    CHECK(fonts.get(chain).width("Привет", 24) == expectedWidth);
+    surface.resetClip(); surface.clear(0);
+    fonts.get(chain).draw(surface, 0, 0, "A", 24, 0xffffff, 0);
+    CHECK(std::all_of(surface.pixels().begin(), surface.pixels().end(), [](auto p) { return p == 0; }));
+    fonts.get(chain).draw(surface, 0, 0, "A", 24, 0xffffff, 128);
+    CHECK(std::any_of(surface.pixels().begin(), surface.pixels().end(), [](auto p) { return p > 0; }));
+    for (auto p : surface.pixels()) CHECK((p & 255) <= 128);
+    fonts.release(chain);
     std::cout << "FONT_OK\n";
 }

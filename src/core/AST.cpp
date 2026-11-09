@@ -24,12 +24,18 @@ Value FuncDefNode::invoke(ValueList args, Context& caller) const {
 }
 
 NumberNode::NumberNode(std::string v) : val(std::move(v)) {
-    isFloat = val.find('.') != std::string::npos;
+    std::string normalized;
+    for (char c : val) if (c != '_') normalized += c;
+    size_t offset = !normalized.empty() && normalized[0] == '-' ? 1 : 0;
+    bool hex = normalized.compare(offset, 2, "0x") == 0 || normalized.compare(offset, 2, "0X") == 0;
+    bool binary = normalized.compare(offset, 2, "0b") == 0 || normalized.compare(offset, 2, "0B") == 0;
+    isFloat = !hex && !binary && normalized.find_first_of(".eE") != std::string::npos;
     if (isFloat) {
-        literal = Value::real(std::strtod(val.c_str(), nullptr));
+        literal = Value::real(std::strtod(normalized.c_str(), nullptr));
     } else {
         errno = 0;
-        long long parsed = std::strtoll(val.c_str(), nullptr, 10);
+        if (hex || binary) normalized.erase(offset, 2);
+        long long parsed = std::strtoll(normalized.c_str(), nullptr, hex ? 16 : binary ? 2 : 10);
         // Digits that do not fit even 64 bits are an error wherever the literal is used.
         tooBig = errno == ERANGE;
         literal = Value::integer(parsed);

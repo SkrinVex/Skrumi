@@ -35,7 +35,9 @@ bool isComparison(runtime::Operator op) {
 // Whether evaluating the expression can change a local variable: only name++ can.
 bool mutates(const Node* node) {
     if (!node) return false;
-    if (dynamic_cast<const PostIncNode*>(node)) return true;
+    if (dynamic_cast<const PostIncNode*>(node) || dynamic_cast<const PathIncNode*>(node)) return true;
+    if (auto* n = dynamic_cast<const ConditionalNode*>(node))
+        return mutates(n->condition.get()) || mutates(n->yes.get()) || mutates(n->no.get());
     if (auto* n = dynamic_cast<const BinOpNode*>(node)) return mutates(n->left.get()) || mutates(n->right.get());
     if (auto* n = dynamic_cast<const UnaryOpNode*>(node)) return mutates(n->operand.get());
     if (auto* n = dynamic_cast<const IndexNode*>(node)) return mutates(n->base.get()) || mutates(n->index.get());
@@ -533,12 +535,19 @@ private:
         }
         if (dynamic_cast<StringNode*>(&node) || dynamic_cast<InterpolationNode*>(&node)) return "string";
         if (dynamic_cast<BoolNode*>(&node)) return "bool";
+        if (auto* n = dynamic_cast<ConditionalNode*>(&node)) {
+            auto a = staticType(*n->yes), b = staticType(*n->no);
+            if (a == b) return a;
+            if ((a == "float" && b == "int") || (a == "int" && b == "float")) return "float";
+            return "";
+        }
         if (auto* n = dynamic_cast<VarAccessNode*>(&node)) {
             std::string type = declaredType(n->ref);
             return type == "int" || type == "float" || type == "string" || type == "bool" ? type : "";
         }
         if (auto* n = dynamic_cast<UnaryOpNode*>(&node)) {
             if (n->op == "!") return "bool";
+            if (n->op == "~") return "int";
             std::string type = staticType(*n->operand);
             return type == "int" || type == "float" ? type : "";
         }
@@ -548,6 +557,9 @@ private:
                 case Operator::And: case Operator::Or: case Operator::Eq: case Operator::Ne:
                 case Operator::Lt: case Operator::Le: case Operator::Gt: case Operator::Ge:
                     return "bool";
+                case Operator::BitAnd: case Operator::BitOr: case Operator::BitXor:
+                case Operator::ShiftLeft: case Operator::ShiftRight:
+                    return "int";
                 case Operator::Add: case Operator::Sub: case Operator::Mul: case Operator::Div: case Operator::Mod: {
                     std::string left = staticType(*n->left), right = staticType(*n->right);
                     if (n->kind == Operator::Add && (left == "string" || right == "string")) return "string";
@@ -597,11 +609,29 @@ private:
             callee->lambda = p.lambdas.back();
             p.callees.push_back(callee);
             emit(Op::Closure, dest, static_cast<int>(p.lambdas.size()) - 1);
+        } else if (auto* n = dynamic_cast<ConditionalNode*>(&node)) {
+            int cond = any(*n->condition);
+            emit(Op::Truth, cond, 0, 0, 0, text("?:"));
+            int otherwise = emit(Op::JumpIfFalse, cond);
+            std::string yesType = staticType(*n->yes), noType = staticType(*n->no);
+            bool promote = (yesType == "float" && noType == "int") || (yesType == "int" && noType == "float");
+            into(*n->yes, dest);
+            if (promote) emit(Op::Coerce, dest, conversion(Value::Kind::Float, "float", "conditional branch"));
+            int done = emit(Op::Jump);
+            patch(otherwise, here());
+            into(*n->no, dest);
+            if (promote) emit(Op::Coerce, dest, conversion(Value::Kind::Float, "float", "conditional branch"));
+            patch(done, here());
         } else if (auto* n = dynamic_cast<BinOpNode*>(&node)) {
             binary(*n, dest);
         } else if (auto* n = dynamic_cast<UnaryOpNode*>(&node)) {
             int reg = any(*n->operand);
-            emit(n->op == "!" ? Op::Not : Op::Negate, dest, reg);
+            emit(n->op == "!" ? Op::Not : n->op == "~" ? Op::BitNot : Op::Negate, dest, reg);
+        } else if (auto* n = dynamic_cast<PathIncNode*>(&node)) {
+            // Reuse assignment paths: each index is evaluated once, and SetPath
+            // returns the old value only after the typed store succeeds.
+            NumberNode one("1");
+            setPath(*n->target, one, n->delta > 0 ? "+" : "-", dest);
         } else if (auto* n = dynamic_cast<PostIncNode*>(&node)) {
             increment(*n, dest);
         } else if (auto* n = dynamic_cast<FuncCallNode*>(&node)) {
@@ -682,6 +712,12 @@ private:
             into(*node.right, dest);
             emit(Op::Truth, dest, 0, 0, 1, opText);
             patch(skip, here());
+            return;
+        }
+        if (node.kind >= runtime::Operator::BitAnd && node.kind <= runtime::Operator::ShiftRight) {
+            int left = operand(*node.left, *node.right);
+            int right = any(*node.right);
+            emit(Op::Bitwise, dest, left, right, static_cast<int>(node.kind), opText);
             return;
         }
         static const Op ops[] = {Op::Add, Op::Sub, Op::Mul, Op::Div, Op::Mod, Op::Eq, Op::Ne, Op::Lt, Op::Le, Op::Gt, Op::Ge};
@@ -910,16 +946,21 @@ private:
         else emit(Op::SetGlobal, reg, globalSite(node.name));
     }
 
-    void setPath(SetNode& node) {
+    void setPath(SetNode& node, int postfixDest = -1) {
+        setPath(*node.target, *node.value, node.op, postfixDest);
+    }
+
+    void setPath(Node& target, Node& expression, const std::string& op, int postfixDest) {
         // The value first: it may change the containers the target lives in. Then the
         // indexes, from the outermost in, as Skrumi always has.
         int value = temp();
-        into(*node.value, value);
+        into(expression, value);
         SetPath path;
-        path.op = node.op;
-        path.kind = runtime::operatorOf(node.op);
+        path.op = op;
+        path.postfix = postfixDest >= 0;
+        path.kind = runtime::operatorOf(op);
         std::vector<SetPath::Step> steps;
-        Node* at = node.target.get();
+        Node* at = &target;
         for (;;) {
             if (auto* index = dynamic_cast<IndexNode*>(at)) {
                 int key = temp();
@@ -927,6 +968,7 @@ private:
                 steps.push_back({false, key, ""});
                 at = index->base.get();
             } else if (auto* field = dynamic_cast<FieldNode*>(at)) {
+                if (field->optional) { fail("Syntax Error: cannot assign through optional access"); return; }
                 steps.push_back({true, -1, field->name});
                 at = field->base.get();
             } else {
@@ -951,6 +993,7 @@ private:
         }
         p.paths.push_back(std::move(path));
         emit(Op::SetPath, value, static_cast<int>(p.paths.size()) - 1);
+        if (postfixDest >= 0) emit(Op::Move, postfixDest, value);
     }
 
     void returnStatement(ReturnNode& node) {
@@ -1316,13 +1359,13 @@ namespace {
 
 const char* opName(Op op) {
     static const char* names[] = {
-        "move", "loadk", "clear", "getglobal", "setglobal", "defglobal", "coerce", "assign", "zero", "newsized",
+        "move", "loadk", "clear", "getglobal", "setglobal", "defglobal", "coerce", "assign", "zero",
         "fail", "add", "sub", "mul", "div", "mod", "eq", "ne", "lt", "le", "gt", "ge", "neg", "not", "truth",
         "jump", "jumpif-false", "jumpif-true", "jumpif-null", "jumpif-notnull", "compare", "for-in", "call", "return", "return-void", "newarray", "newmap",
         "mapkey", "concat", "index", "field", "setpath", "inc", "inc-global", "box", "unbox", "box-store", "box-assign", "get-capture",
         "set-capture", "inc-ref", "closure", "call-value", "method", "declare", "throw", "rethrow", "try-enter",
         "try-leave", "match", "statement", "scope-enter", "scope-leave", "declared",
-        "add-int", "sub-int", "mul-int", "div-int", "mod-int", "compare-int", "call-direct", "add-int-k", "sub-int-k", "compare-int-k"};
+        "add-int", "sub-int", "mul-int", "div-int", "mod-int", "compare-int", "call-direct", "add-int-k", "sub-int-k", "compare-int-k", "bitwise", "bitnot"};
     return names[static_cast<int>(op)];
 }
 
@@ -1374,13 +1417,14 @@ void disassemble(const Proto& proto, std::ostream& out) {
             case Op::Assign: out << reg(in.a) << " " << reg(in.b) << " (" << K[in.c].str() << ")"; break;
             case Op::Zero: out << reg(in.a) << " " << K[in.b].str(); break;
             case Op::Fail: out << show(K[in.a]); break;
+            case Op::Bitwise:
             case Op::Add: case Op::Sub: case Op::Mul: case Op::Div: case Op::Mod:
             case Op::AddInt: case Op::SubInt: case Op::MulInt: case Op::DivInt: case Op::ModInt:
             case Op::Eq: case Op::Ne: case Op::Lt: case Op::Le: case Op::Gt: case Op::Ge:
                 out << reg(in.a) << " " << reg(in.b) << " " << reg(in.c);
                 break;
             case Op::AddIntK: case Op::SubIntK: out << reg(in.a) << " " << reg(in.b) << " " << in.c; break;
-            case Op::Negate: case Op::Not: out << reg(in.a) << " " << reg(in.b); break;
+            case Op::Negate: case Op::Not: case Op::BitNot: out << reg(in.a) << " " << reg(in.b); break;
             case Op::Truth: out << reg(in.a); break;
             case Op::Jump: out << "-> " << in.a; break;
             case Op::JumpIfFalse: case Op::JumpIfTrue: case Op::JumpIfNull: case Op::JumpIfNotNull:
