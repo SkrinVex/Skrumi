@@ -297,9 +297,8 @@ array ui_wrap_text(string text, int width) {
     if (width < 1) { fail("Text: width must be positive"); }
     array lines;
     string line = "";
-    for (int i = 0; i < str_length(text); i++) {
-        string character = str_substring(text, i, 1);
-        if (character == "\n") { push(lines, line); line = ""; }
+    for (character in grapheme_split(text)) {
+        if (character == "\n" || character == "\r\n") { push(lines, line); line = ""; }
         else {
             if (line != "" && ui_text_width(line + character) > width) { push(lines, line); line = ""; }
             line += character;

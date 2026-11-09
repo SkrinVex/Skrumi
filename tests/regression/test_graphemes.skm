@@ -23,3 +23,6 @@ assert(text_supported(0, "Привет • ★ ⚡ ❤ ☠ ⬆ ⬇"));
 assert(!text_supported(0, "🦊"));
 assert(!text_supported(0, "👨‍👩‍👧‍👦"));
 assert_equal(text_missing_glyphs(0, "🦊abc🦊"), ["🦊"]);
+using ui;
+assert_equal(ui_wrap_text("a👨‍👩‍👧‍👦b", 5), ["a", "👨‍👩‍👧‍👦", "b"]);
+assert_equal(ui_wrap_text("a\r\nb", 100), ["a", "b"]);

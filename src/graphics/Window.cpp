@@ -144,7 +144,7 @@ struct Window::Native {
         if (!self) return DefWindowProcW(handle, message, wparam, lparam);
         switch (message) {
             case WM_SETCURSOR:
-                if (LOWORD(lparam) == HTCLIENT) { SetCursor(self->owner.mouseVisible() ? LoadCursorW(nullptr, IDC_ARROW) : nullptr); return TRUE; }
+                if (LOWORD(lparam) == HTCLIENT) { SetCursor(self->owner.mouseVisible() ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr); return TRUE; }
                 break;
             case WM_CLOSE: self->owner.closeEvent(); return 0;
             case WM_DESTROY: self->owner.destroyedEvent(); return 0;
@@ -921,7 +921,7 @@ void Window::setMouseVisible(bool visible) {
     (void)visible; fail("mouse visibility is currently supported on Windows and X11");
 #elif defined(_WIN32)
     mouseVisible_ = visible;
-    SetCursor(visible ? LoadCursorW(nullptr, IDC_ARROW) : nullptr);
+    SetCursor(visible ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
 #else
     auto* c = native_->connection;
     uint32_t cursor = XCB_NONE;
