@@ -407,7 +407,7 @@ img { max-width: 100%; }
     <a class="try" href="builder/">Конструктор интерфейсов →</a>
   </div>
   <div class="facts" aria-label="Skrumi в цифрах">
-    <div><b>3</b><span>шага от текста до результата</span></div>
+    <div><b>4</b><span>шага от текста до результата</span></div>
     <div><b>321</b><span>встроенных функций</span></div>
     <div><b>18</b><span>модулей библиотеки</span></div>
     <div><b>146</b><span>автотестов CTest на Linux</span></div>
@@ -455,6 +455,32 @@ img { max-width: 100%; }
       <p>и запускаешь <code>skrumi hello.skm</code>. Программа <code>skrumi</code> читает текст, понимает его и выполняет. Сама она написана на C++, быстром «взрослом» языке. Получается, что Skrumi живёт внутри программы на C++, примерно как игра внутри игровой приставки.</p>
     </section>
 
+    <section id="writing">
+      <h2>Писать меньше, выражать точнее</h2>
+      <p>Тернарный оператор выбирает значение и вычисляет только выбранную ветвь. Условие обязательно имеет тип bool. Поля и элементы поддерживают постфиксные <code>++</code>/<code>--</code>; битовые операции работают с 32-битным int.</p>
+      <pre class="skrumi" data-skrumi>/* Цвет, маска и счётчик без временных переменных. */
+int hp = 5;
+int color = hp &gt; 3 ? 0x22CC88 : 0xDD3344;
+int flags = 0b1000 | (1 &lt;&lt; 2);
+array scores = [1_000, 500];
+scores[0]++;
+float distance = 1.5e3;
+print(color, flags, scores[0], distance);</pre>
+      <p><code>skrumi init my-app</code> создаёт проект с <code>skrumi.toml</code>. В каталоге проекта работают <code>skrumi run .</code>, <code>skrumi check --project</code>, <code>skrumi test</code> и <code>skrumi build . --force</code>. Проверка сообщает о затенении встроенных имён в месте объявления; LSP предлагает переименование.</p>
+      <p><a href="https://github.com/SkrinVex/Skrumi/blob/master/DOCUMENTATION.md">Справочник языка</a> · <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/PROJECTS.md">Проекты и команды</a> · <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/MIGRATION.md">Обновление существующего кода</a></p>
+    </section>
+
+    <section id="unicode">
+      <h2>Строки: байты, кодовые точки и графемы</h2>
+      <p>Строки хранятся в UTF-8. Один видимый знак может занимать несколько байтов и состоять из нескольких кодовых точек. Графема — целый знак для редактирования: например, семья из нескольких эмодзи, соединённых ZWJ.</p>
+      <pre class="skrumi" data-skrumi>string family = "👨‍👩‍👧‍👦";
+print(byte_size(family));         // 25 байт; size даёт тот же результат
+print(char_length(family));       // 7 кодовых точек; как str_length
+print(grapheme_length(family));   // 1 графема
+print(grapheme_substring(family, 0, 1)); // вся семья</pre>
+      <p>Графемные операции следуют Unicode 16 UAX #29. Поля UI удаляют и перемещают курсор по графемам. Хранение и редактирование эмодзи не гарантирует их отрисовку: встроенный шрифт имеет фиксированный набор символов, TTF рисуются одним цветом. <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/FONTS.md">Шрифты и эмодзи</a>.</p>
+    </section>
+
     <section id="pipeline">
       <h2>Путь программы: четыре шага</h2>
       <p>Когда ты читаешь предложение на чужом языке, ты сначала выделяешь слова, потом понимаешь грамматику, потом смысл. <code>skrumi</code> делает то же самое, а потом ещё переводит понятое в короткие простые команды и выполняет их.</p>
@@ -487,7 +513,7 @@ img { max-width: 100%; }
       </div>
 
       <h3>Шаг 1. Лексер</h3>
-      <p>Лексер (<code>src/core/Lexer.cpp</code>) идёт по тексту буква за буквой и собирает <strong>токены</strong>: ключевые слова (<code>int</code>, <code>if</code>), имена (<code>x</code>), числа, строки и знаки. Пробелы и комментарии <code>//</code> он выбрасывает. У каждого токена запоминается строка и столбец: когда что-то сломается, ошибка скажет «строка 12».</p>
+      <p>Лексер (<code>src/core/Lexer.cpp</code>) идёт по тексту буква за буквой и собирает <strong>токены</strong>: ключевые слова (<code>int</code>, <code>if</code>), имена (<code>x</code>), числа, строки и знаки. Пробелы, комментарии <code>//</code> и невложенные <code>/* ... */</code> он пропускает. У каждого токена запоминается строка и столбец: когда что-то сломается, ошибка скажет «строка 12».</p>
       <h3>Шаг 2. Парсер</h3>
       <p>Парсер (<code>src/core/Parser.cpp</code>) знает грамматику: что после <code>int</code> идёт имя, потом <code>=</code>, потом выражение и <code>;</code>. Из токенов он строит <strong>дерево</strong>, его ещё называют AST. Умножение оказывается глубже сложения, поэтому считается раньше. Так и получается правило «умножение раньше сложения». Если грамматика нарушена, парсер сообщает <code>Syntax Error</code> с номером строки.</p>
       <h3>Шаг 3. Компилятор</h3>
@@ -654,8 +680,8 @@ throw "своя ошибка";   // бросить ошибку самому</pr
 
     <section id="library">
       <h2>Встроенные функции и библиотека</h2>
-      <p><strong>Встроенные функции</strong> написаны на C++: <code>print</code>, <code>size</code>, <code>read_file</code>, <code>push</code>, <code>json_decode</code> и ещё около двухсот. Про каждую записаны имя, типы параметров и описание. Перед вызовом язык сам проверяет, подходят ли аргументы, а редактор показывает то же описание в подсказке.</p>
-      <p><strong>Стандартная библиотека</strong> — 18 модулей на самом Skrumi в папке <code>std/</code>: <code>string</code>, <code>fs</code>, <code>http</code>, <code>server</code>, <code>graphics</code>, <code>ui</code>, <code>sound</code> и другие. Строка <code>using fs;</code> подключает <code>std/fs.skm</code> с удобными короткими именами. Эти файлы вшиты прямо в программу <code>skrumi</code>, отдельно их устанавливать не нужно.</p>
+      <p><strong>Встроенные функции</strong> написаны на C++: <code>print</code>, <code>size</code>, <code>read_file</code>, <code>push</code>, <code>json_decode</code> и многие другие. Про каждую записаны имя, типы параметров и описание. Перед вызовом язык сам проверяет, подходят ли аргументы, а редактор показывает то же описание в подсказке.</p>
+      <p><strong>Стандартная библиотека</strong> — 18 модулей на самом Skrumi в папке <code>std/</code>: <code>string</code>, <code>fs</code>, <code>http</code>, <code>server</code>, <code>graphics</code>, <code>ui</code>, <code>sound</code>, <code>game</code> и другие. Строка <code>using fs;</code> подключает <code>std/fs.skm</code> с удобными короткими именами. Эти файлы вшиты прямо в программу <code>skrumi</code>, отдельно их устанавливать не нужно.</p>
       <p>Свои файлы подключаются через <code>include("utils.skm");</code>. Когда интерпретатор встречает <code>include</code>, он читает этот файл, разбирает его тем же лексером и парсером и регистрирует его функции, структуры и глобальные переменные. Каждый файл подключается один раз, даже если его просят из нескольких мест. Проект из нескольких файлов — одна программа: функции из одного файла видны в другом.</p>
       <pre class="skrumi" data-skrumi>// utils.skm
 int double_it(int n) {
@@ -680,7 +706,7 @@ print(double_it(21), upper("лиса"));   // 42 ЛИСА</pre>
             <tr><td>JSON</td><td>текст в словари и массивы и обратно</td><td><code>json_decode</code>, <code>json_value</code></td></tr>
             <tr><td>Графика</td><td>окно, фигуры, текст, картинки PNG, мышь, клавиатура</td><td>X11 на Linux, Win32 на Windows, SkrumiView на Android</td></tr>
             <tr><td>Интерфейс</td><td>кнопки, поля, прогресс, диалоги, темы, прокрутка и управляемое закрытие</td><td>модуль <code>ui</code></td></tr>
-            <tr><td>Звук</td><td>WAV-файлы и тоны</td><td>PlaySound на Windows, pw-play или aplay на Linux, MediaPlayer на Android</td></tr>
+            <tr><td>Звук</td><td>микшер, каналы, громкость, циклы, пауза и затухание</td><td>miniaudio в нативных сборках; ограничения Web и static musl описаны в руководстве по звуку</td></tr>
           </tbody>
         </table>
       </div>
@@ -737,7 +763,7 @@ close_window();</pre>
       </ul>
 
       <h3>Шрифт из единичек и ноликов</h3>
-      <p>Никаких файлов шрифтов Skrumi не использует. Каждая буква — это 7 строк по 5 точек, а каждая строка хранится одним числом, у которого биты означают «точка есть» или «точки нет». Буква <code>A</code> записана в исходниках так: <code>{14, 17, 17, 31, 17, 17, 17}</code>.</p>
+      <p><code>draw_text</code> использует встроенный пиксельный шрифт без внешних файлов. Каждая буква — это 7 строк по 5 точек, а каждая строка хранится одним числом, у которого биты означают «точка есть» или «точки нет». Буква <code>A</code> записана в исходниках так: <code>{14, 17, 17, 31, 17, 17, 17}</code>.</p>
       <div class="glyph-row">
         <div class="glyph-table" id="glyph-table" aria-label="Буква A по строкам"></div>
         <div class="glyph-note">
@@ -745,6 +771,8 @@ close_window();</pre>
           <p>Строчные <code>g p q y j д ц щ</code> имеют ещё две строки ниже для хвостиков. Русские буквы, похожие на латинские (А, В, Е, О, Р, С…), используют одни и те же точки. Буква с масштабом 2 рисуется квадратиками 2×2.</p>
         </div>
       </div>
+
+      <p>Для масштабируемого текста есть отдельные <code>load_font_file</code> и <code>draw_font_text</code>: они загружают TTF/OTF и рисуют монохромные глифы. <code>font_with_fallback</code> задаёт цепочку шрифтов, а <code>text_supported</code> заранее проверяет покрытие. Цветные эмодзи, shaping и bidi пока не реализованы; для игровых иконок подходят PNG-атласы. <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/FONTS.md">Точные ограничения и таблица символов</a>.</p>
 
       <h3>Картинки PNG</h3>
       <p>PNG-файл хранит картинку в сжатом виде, как архив. Функция <code>load_image</code> делает то же, что любая программа просмотра:</p>
@@ -755,6 +783,8 @@ close_window();</pre>
         <li>Превращает всё в точки с прозрачностью. Картинка готова к рисованию.</li>
       </ol>
       <p>При рисовании полупрозрачная точка <strong>смешивается</strong> с тем, что уже нарисовано: новый цвет = старый × (1 − α) + цвет картинки × α, где α — непрозрачность от 0 до 1. Так тень или стекло пропускают фон.</p>
+
+      <p>Дополнительные API рисуют полупрозрачные круги, линии и текст, поворачивают и отражают спрайты, используют RGB canvas и сохраняют PNG-скриншоты. <code>set_target_fps</code> ограничивает частоту кадров в нативном окне. Скрытие и захват курсора с относительным движением доступны на Windows/X11. <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/GAME_DEVELOPMENT.md">Примеры для игр</a>.</p>
 
       <h3>Окно, клавиатура и мышь</h3>
       <p>С операционной системой Skrumi разговаривает напрямую: на Linux через протокол X11 (он работает и под Wayland), на Windows через Win32, на Android через SkrumiView/JNI. Когда ты жмёшь клавишу или двигаешь мышь, система кладёт в очередь окна <strong>событие</strong>. <code>window_poll()</code> в начале кадра разбирает всю очередь и запоминает состояние:</p>
@@ -778,10 +808,11 @@ close_window();</pre>
       </ol>
 
       <h3>Звук</h3>
-      <p>Модуль <code>sound</code> проигрывает WAV-файлы и тоны, не останавливая программу. Тон Skrumi строит сам: считает 44 100 значений синусоиды на каждую секунду звука, плавно поднимает и опускает громкость в начале и в конце, чтобы не было щелчка, и отдаёт звук системе: на Windows через <code>PlaySound</code>, на Linux через проигрыватель рабочего стола, на Android через MediaPlayer.</p>
+      <p>Модуль <code>sound</code> проигрывает WAV-файлы и тоны, не останавливая программу. Тон Skrumi строит сам: считает 44 100 значений синусоиды на каждую секунду звука, плавно поднимает и опускает громкость в начале и в конце, чтобы не было щелчка, и передаёт его на воспроизведение: на Windows через встроенный микшер, на Linux через внешний проигрыватель, на Android через MediaPlayer.</p>
       <pre class="skrumi" data-skrumi>using sound;
 beep(440, 200);                  // «ля» первой октавы, 0.2 секунды
 play_sound("sounds/jump.wav");</pre>
+      <p>Новый <code>play_sound_ex</code> возвращает handle отдельного звука. Микшер поддерживает одновременные голоса, каналы SFX/MUSIC/UI, громкость, панораму, loop, pause/resume и fade; музыку можно читать потоком в WAV/MP3/FLAC/Vorbis. В браузере звука пока нет, а static-musl установщик Linux не может загружать системные аудиобиблиотеки: для нового микшера там нужна обычная сборка. <a href="https://github.com/SkrinVex/Skrumi/blob/master/docs/AUDIO.md">Матрица платформ и примеры</a>.</p>
     </section>
 
     <section id="server">
@@ -997,7 +1028,7 @@ print(square(4));</pre>
 <footer>Skrumi 11.0.0 · исходники и документация — <a href="https://github.com/SkrinVex/Skrumi" target="_blank" rel="noopener">github.com/SkrinVex/Skrumi</a></footer>
 
 <script type="application/json" id="bench-data">
-{"version":"8.1.0","date":"2026-09-25","machine":{"os":"Linux x86_64","cpu":"Intel(R) Celeron(R) N4020C CPU @ 1.10GHz"},"runs":5,"languages":{"skrumi":{"name":"Skrumi","version":"Skrumi 8.1.0"},"skrumi_baseline":{"name":"Skrumi (previous)","version":"Skrumi 8.0.0"},"python":{"name":"Python","version":"Python 3.14.7"},"lua":{"name":"Lua","version":"Lua 5.4.9"},"javascript":{"name":"JavaScript (Node.js)","version":"v26.10.0"}},"benchmarks":[{"name":"array_sum","about":"Growing an array and reading it back by index.","seconds":{"skrumi":0.8220495040004607,"skrumi_baseline":0.8046430410031462,"python":0.11204682500101626,"lua":0.04474602800473804,"javascript":0.08812319800199475}},{"name":"fib","about":"Function calls: naive recursive Fibonacci.","seconds":{"skrumi":0.6164286349958275,"skrumi_baseline":0.6133975439952337,"python":0.07494633600435918,"lua":0.02926724500139244,"javascript":0.07089768599689705}},{"name":"json_roundtrip","about":"Turning records into JSON text and back.","seconds":{"skrumi":0.3555030940042343,"skrumi_baseline":0.34874510599911446,"python":0.20824911999807227,"javascript":0.135121507999429}},{"name":"loop","about":"Integer arithmetic in a tight loop.","seconds":{"skrumi":2.797177840999211,"skrumi_baseline":2.7681683769988013,"python":0.5878342849973706,"lua":0.10385304999363143,"javascript":0.08476455699565122}},{"name":"map_lookup","about":"Inserting keys into a map and looking every one of them up.","seconds":{"skrumi":0.6534529349955847,"skrumi_baseline":null,"python":0.28541876199597027,"lua":0.6466928770023515,"javascript":0.4442104150002706}},{"name":"records","about":"Creating many small records and reading their fields.","seconds":{"skrumi":0.9637308169985772,"skrumi_baseline":0.9543194729994866,"python":0.25225184000009904,"lua":0.19137996299832594,"javascript":0.13434408799366793}},{"name":"sort_numbers","about":"Sorting numbers with the language's own sort.","seconds":{"skrumi":0.5961958159969072,"skrumi_baseline":0.5898370669965516,"python":0.25797608100401703,"lua":0.254622147003829,"javascript":0.23630277100164676}},{"name":"split_join","about":"Building text, joining and splitting it.","seconds":{"skrumi":0.600587403998361,"skrumi_baseline":19.539538478995382,"python":0.14139736899960553,"lua":0.4179613119995338,"javascript":0.17239006900490494}}]}
+{"version":"11.0.0","date":"2026-11-09","machine":{"os":"Linux x86_64","cpu":"AMD EPYC 9V74 80-Core Processor"},"runs":5,"languages":{"skrumi":{"name":"Skrumi","version":"Skrumi 11.0.0"},"skrumi_baseline":{"name":"Skrumi (previous)","version":"Skrumi 10.0.1"},"python":{"name":"Python","version":"Python 3.12.3"},"lua":{"name":"Lua","version":"Lua 5.4.6"},"ruby":{"name":"Ruby","version":"ruby 3.2.3 (2024-01-18 revision 52bb2ac0a6) [x86_64-linux-gnu]"},"javascript":{"name":"JavaScript (Node.js)","version":"v22.23.4"}},"benchmarks":[{"name":"array_sum","about":"Growing an array and reading it back by index.","seconds":{"skrumi":0.0206609530000037,"skrumi_baseline":0.016893817000010358,"python":0.043916940999991994,"lua":0.01730629099998282,"ruby":0.08975123100000815,"javascript":0.03612316699999951}},{"name":"fib","about":"Function calls: naive recursive Fibonacci.","seconds":{"skrumi":0.020116372000018146,"skrumi_baseline":0.019552183000001833,"python":0.03513773599999581,"lua":0.011218807999995306,"ruby":0.06688796899999261,"javascript":0.02607345399999872}},{"name":"json_roundtrip","about":"Turning records into JSON text and back.","seconds":{"skrumi":0.04797671000000037,"skrumi_baseline":0.047082222999989654,"python":0.06985039900001766,"ruby":0.1044978459999868,"javascript":0.05866697999999815}},{"name":"loop","about":"Integer arithmetic in a tight loop.","seconds":{"skrumi":0.034991905999987694,"skrumi_baseline":0.032386881999997286,"python":0.21074022700000228,"lua":0.03642630900000654,"ruby":0.1284602780000057,"javascript":0.032178943000019444}},{"name":"map_lookup","about":"Inserting keys into a map and looking every one of them up.","seconds":{"skrumi":0.05785396999999648,"skrumi_baseline":0.058014533999994455,"python":0.09752934400000868,"lua":0.15327236699999958,"ruby":0.22934480899999699,"javascript":0.10072270200001299}},{"name":"records","about":"Creating many small records and reading their fields.","seconds":{"skrumi":0.07047178700000245,"skrumi_baseline":0.06674180900000692,"python":0.12378277999999909,"lua":0.06681797300001335,"ruby":0.12788927999997668,"javascript":0.054112970999995014}},{"name":"sort_numbers","about":"Sorting numbers with the language's own sort.","seconds":{"skrumi":0.03917454099999418,"skrumi_baseline":0.039162838999999394,"python":0.08541150800002129,"lua":0.09804948600000785,"ruby":0.10355002699998295,"javascript":0.10245410099997798}},{"name":"split_join","about":"Building text, joining and splitting it.","seconds":{"skrumi":0.03602515600002221,"skrumi_baseline":0.03398396000000048,"python":0.06020006999997918,"lua":0.11188803799998936,"ruby":0.13934536800002206,"javascript":0.07778804400001604}}]}
 </script>
 <script>
 (function () {
@@ -1056,7 +1087,7 @@ print(square(4));</pre>
   }
 
   // Skrumi highlighting for the code samples.
-  var keywords = /^(int|float|string|bool|void|array|map|func|in|struct|const|enum|if|else|while|for|return|using|include|try|catch|finally|throw|true|false|null|this|break|continue)$/;
+  var keywords = /^(int|float|string|bool|void|array|map|func|in|struct|const|enum|if|else|while|for|return|using|include|try|catch|finally|throw|true|false|null|this|break|continue|global|switch|case|default|as)$/;
   function escapeHtml(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
   document.querySelectorAll("pre[data-skrumi]").forEach(function (pre) {
     var src = pre.textContent, out = "", i = 0;
@@ -1065,10 +1096,13 @@ print(square(4));</pre>
       if (rest.indexOf("//") === 0) {
         var end = src.indexOf("\n", i); if (end < 0) end = src.length;
         out += '<span class="c">' + escapeHtml(src.slice(i, end)) + "</span>"; i = end;
+      } else if (rest.indexOf("/*") === 0) {
+        var close = src.indexOf("*/", i + 2); close = close < 0 ? src.length : close + 2;
+        out += '<span class="c">' + escapeHtml(src.slice(i, close)) + "</span>"; i = close;
       } else if (ch === '"') {
         var j = i + 1; while (j < src.length && src[j] !== '"') { if (src[j] === "\\") j++; j++; }
         out += '<span class="s">' + escapeHtml(src.slice(i, j + 1)) + "</span>"; i = j + 1;
-      } else if ((m = rest.match(/^[0-9]+(\.[0-9]+)?/))) {
+      } else if ((m = rest.match(/^(?:0[xX][0-9a-fA-F](?:_?[0-9a-fA-F])*|0[bB][01](?:_?[01])*|[0-9](?:_?[0-9])*(?:\.[0-9](?:_?[0-9])*)?(?:[eE][+-]?[0-9](?:_?[0-9])*)?)/))) {
         out += '<span class="n">' + m[0] + "</span>"; i += m[0].length;
       } else if ((m = rest.match(/^[A-Za-z_][A-Za-z0-9_]*/))) {
         out += keywords.test(m[0]) ? '<span class="k">' + m[0] + "</span>" : m[0]; i += m[0].length;

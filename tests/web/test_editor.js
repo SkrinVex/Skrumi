@@ -45,6 +45,14 @@ const { chromium } = require('playwright');
         };
       });
       await page.goto(`http://127.0.0.1:${server.address().port}/playground/`);
+      const originalSource = await page.locator('#source').inputValue();
+      await page.locator('#source').fill('/* значения */\nint n = 0xFF + 0b10 + 1_000; float f = 1.5e+3;');
+      assert.deepEqual(await page.locator('#highlight .n').allTextContents(), ['0xFF', '0b10', '1_000', '1.5e+3']);
+      assert.equal(await page.locator('#highlight .c').textContent(), '/* значения */');
+      await page.locator('#examples').selectOption('expressions');
+      await page.waitForFunction(() => document.querySelector('#source').value.includes('grapheme_length(family)'));
+      assert((await page.locator('#highlight .n').allTextContents()).includes('0x22CC88'));
+      await page.locator('#source').fill(originalSource);
       const savedProject = await context.newPage();
       await savedProject.addInitScript(() => {
         window.inputs = [];

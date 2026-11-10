@@ -1,28 +1,37 @@
-# Migration to explicit language contracts
+# Обновление проектов Skrumi
 
-The current release removes three language behaviors from the previous major.
-The VERSION file is the authoritative version number.
+Установите актуальную сборку из [GitHub Releases](https://github.com/SkrinVex/Skrumi/releases/latest)
+поверх своей управляемой установки и откройте новый терминал. `skrumi --version`
+показывает версию установленного интерпретатора; версия исходников хранится в
+[VERSION](../VERSION). Подробности установки и восстановления — в
+[GUI_INSTALLER.md](GUI_INSTALLER.md).
 
-- Replace implicit float-to-int conversion with to_int(value), including typed
-  arrays/maps, fields, function arguments/results, builtin int arguments and
-  array indices. This truncates toward zero; use a rounding function first when
-  that is the intended behavior. Int-to-float widening remains implicit.
-- Replace a sized array declaration with an empty declaration and
-  resize(name, count). Existing literals and array parameters are unchanged.
-- A Skrumi function now shadows a builtin by name for every argument list.
-  There is no runtime fallback based on argument types. After importing server,
-  get refers to its route function; use items[index] for array access.
-  Use a module alias such as using server as http and http.get for explicit
-  module calls. Imports still export global names; aliases do not introduce
-  isolated module namespaces.
-- Fish PATH integration now writes a native conf.d fragment and supports
-  transactional rollback. Existing POSIX/zsh plans can still be removed using
-  their recorded destination even if the login shell has changed.
+## Выражения и сравнения
 
-For a module-level array initialized during import, keep allocation inside the
-initializer: imports execute declarations but skip standalone top-level calls.
-A small ordinary function supplies that initializer without special syntax:
+Сравнения `<`, `<=`, `>`, `>=` имеют больший приоритет, чем `==` и `!=`, как в C.
+Проверьте выражения, где они смешаны без скобок. Скобки явно задают нужный порядок.
+Тернарный оператор `?:` требует bool и вычисляет только выбранную ветвь.
+Битовые операции принимают int; `>>` сохраняет знак, сдвиг допускает 0..31.
 
+## Числа, массивы и имена функций
+
+При обновлении старого кода учитывайте действующие правила:
+
+- Для преобразования float в int используйте `to_int(value)`, в том числе для
+  аргументов, индексов, полей и типизированных контейнеров. Дробная часть
+  отбрасывается к нулю; округление вызывайте отдельно. Int в float расширяется
+  автоматически.
+- Размер массива меняйте через `resize(name, count)` после объявления.
+- Пользовательская функция затеняет встроенную по имени при любом числе аргументов.
+  Предупреждение SKR2001 помогает обнаружить такое объявление. Для явного выбора
+  функции модуля используйте alias, например `using server as http;` и `http.get(...)`.
+- `const` защищает привязку имени, а структуры и контейнеры передаются по ссылке.
+  Для независимых данных используйте глубокую `copy()`.
+
+Импорты исполняют объявления, поэтому инициализацию массива уровня модуля
+помещайте внутрь выражения или функции-инициализатора:
+
+<!-- skrumi-run -->
 ```cpp
 array make_zeros(int count) {
     array result;
@@ -30,60 +39,34 @@ array make_zeros(int count) {
     return result;
 }
 array zeros = make_zeros(3);
+assert_equal(size(zeros), 3);
 ```
 
-Known narrowing is diagnosed by check/LSP. Untyped parameters, dynamic function
-values and container contents still require runtime checks; check is not a proof
-that a program cannot fail.
+## Строки, шрифты и звук
 
-# Переход на самостоятельный Skrumi
+`size(string)` по-прежнему считает байты, а `str_length` — кодовые точки.
+Для удаления и разрезания пользовательского текста применяйте графемные функции:
+они сохраняют составные эмодзи целиком. Это не добавляет цветные глифы шрифту.
+Различия пиксельного шрифта, TTF и эмодзи описаны в [FONTS.md](FONTS.md).
 
-## History
+На Windows старые звуковые вызовы теперь могут звучать одновременно.
+Для управления отдельными звуками используйте handles нового микшера.
+Web и статическая Linux-сборка имеют ограничения: [AUDIO.md](AUDIO.md).
 
-Skrumi ранее назывался FoxLang. Совместимость с прежним именем намеренно
-удалена в major-релизе 9: сторонней экосистемы пока нет, поэтому старые личные
-программы переносятся вручную. История Git, теги и опубликованные релизы сохранены.
+## Проверка и сборка
 
-## Перенос программ и окружения
+```sh
+skrumi check --project
+skrumi test
+skrumi build . --force
+```
 
-- Переименуйте исходники `.fox` в `.skm` и обновите явные пути в `include`,
-  `using`, конфигурациях запуска, ссылках и ресурсах. Синтаксис языка не меняется.
-- Используйте только `skrumi` и `skrumi-lsp`. Старые команды `foxlang` и
-  `foxlang-lsp`, параметры `--foxlang-*` больше не предоставляются.
-- Замените переменные `FOXLANG_*` на `SKRUMI_*`, включая `FOXLANG_HOME` →
-  `SKRUMI_HOME`. Старые переменные больше не влияют на настройки runtime.
-- Перенесите настройки редактора на ID `skrumi`, ключи `skrumi.*` и
-  расширение VS Code `SkrinVex.skrumi-language`. Это новая идентичность пакета;
-  автоматическая замена старого Marketplace-пакета не предполагается.
-- Для C++ используйте `include/skrumi`, namespace `skrumi`, `skrumi_core` и
-  параметры CMake `SKRUMI_*`. Пересоберите в новом каталоге сборки.
-- Android использует модуль `:skrumi`, пакет `org.skrumi.android`, классы
-  `Skrumi`, `SkrumiView`, `SkrumiControls` и свойства Gradle `skrumi*`.
-  Приложения с новым application ID устанавливаются отдельно от старых.
-- Экспортируйте старые проекты Playground/UI Builder перед обновлением;
-  переименуйте исходники и перенесите их в новый проект. Старые ключи
-  browser storage и протоколы интеграции больше не являются контрактом.
+Эти команды используют `skrumi.toml`; для проекта без манифеста укажите файл
+явно. `--force` заменяет существующий выходной файл, сохраняя защиту исходников.
+Синтаксис манифеста и работа с ресурсами — в [PROJECTS.md](PROJECTS.md).
+Собранное приложение содержит свою версию runtime: для обновления его нужно
+собрать заново. Код из конструктора экспортируется двумя файлами — `layout.skm`
+и `main.skm`; при правках макета сохраняйте пользовательский `main.skm`.
 
-## Импорты
-
-Единственное расширение исходников — `.skm`. CLI, проверка, форматирование,
-standalone-сборка и APK-упаковщик отклоняют другие расширения. Поиск `using name;`
-рассматривает только `name.skm`: стандартная библиотека имеет приоритет над
-одноимённым локальным модулем. Явные пути не подменяются другими расширениями.
-Относительные пути вычисляются от импортирующего файла. Повторные и циклические
-импорты используют одну каноническую идентичность модуля. Ошибка выбранного
-модуля не запускает поиск запасной реализации. Неразрешённые импорты считаются
-ошибками также в `skrumi check` и LSP, а не предупреждениями.
-
-## Установка и сохранность данных
-
-Установщик содержит два исполняемых файла и одну стандартную библиотеку.
-Standalone и LSP работают с этой библиотекой; стандартные модули также встроены
-в runtime. Android SDK распространяется отдельным AAR, упаковщик APK находится
-в репозитории и требует Android SDK/NDK/Gradle.
-
-Не удаляйте неизвестные каталоги или пользовательские файлы. Новая установка
-не ищет старые установки по прежнему бренду и не удаляет их автоматически.
-Обновление явно выбранной управляемой установки использует манифесты владения,
-проверку хешей, журнал, откат и восстановление. Старый установщик следует
-удалять его собственным механизмом после сохранения личных программ.
+`check` и LSP находят известные ошибки типов; динамические значения дополнительно
+проверяются при выполнении. Успешная статическая проверка не заменяет запуск тестов.

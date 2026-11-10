@@ -1,0 +1,22 @@
+/* Короткие выражения и Unicode. Все значения проверяются ниже. */
+int hp = 5;
+int color = hp > 3 ? 0x22CC88 : 0xDD3344;
+int flags = 0b1000 | (1 << 2);
+array scores = [1_000, 500];
+scores[0]++;
+float distance = 1.5e3;
+assert_equal(color, 0x22CC88);
+assert_equal(flags, 12);
+assert_equal(scores[0], 1001);
+assert_equal(distance, 1500.0);
+assert_equal(true ? 42 : to_int("не число"), 42);
+
+string family = "👨‍👩‍👧‍👦";
+assert_equal(byte_size(family), 25);
+assert_equal(char_length(family), 7);
+assert_equal(grapheme_length(family), 1);
+assert_equal(grapheme_substring(family, 0, 1), family);
+print("Байты:", byte_size(family));
+print("Кодовые точки:", char_length(family));
+print("Графемы:", grapheme_length(family));
+print("Выражения и Unicode: всё верно");

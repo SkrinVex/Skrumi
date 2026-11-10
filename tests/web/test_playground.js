@@ -39,6 +39,9 @@ function expect(condition, message, result) {
   const canonicalModules = await run({"main.skm": 'include("helper.skm"); using extra; print(helper() + extra());',
     "helper.skm": 'int helper() { return 20; }', "extra.skm": 'int extra() { return 22; }'});
   expect(canonicalModules.code === 0 && canonicalModules.out === "42\n", "canonical source imports", canonicalModules);
+  expect(canonicalModules.module.ccall("skrumi_version", "string", [], []) ===
+    fs.readFileSync(path.join(__dirname, "../../VERSION"), "utf8").trim(),
+    "published runtime follows the repository VERSION");
   const unsupported = await run({"main.txt": 'print(42);'}, "", "main.txt");
   expect(unsupported.code === 1 && unsupported.err.includes(".skm"), "reject unsupported source format", unsupported);
   const unsupportedCheck = JSON.parse(unsupported.module.ccall("skrumi_check", "string", ["string"], ["main.txt"]));
@@ -47,6 +50,7 @@ function expect(condition, message, result) {
   const examples = path.join(directory, "examples");
   const expected = {
     "hello.skm": "FizzBuzz",
+    "expressions.skm": "Выражения и Unicode: всё верно",
     "functions.skm": "fib(25) = 75025",
     "structs.skm": "через год ей будет 6",
     "maps.skm": "Лис в городе: 3",

@@ -9,9 +9,6 @@ import sys
 root = Path(__file__).resolve().parents[1]
 retired = re.compile(r'fox[ _-]?lang|\.fox', re.I)
 allowed = {
-    'CHANGELOG.md': 'Historical entries and the breaking-release record.',
-    'README.md': 'History paragraph only.',
-    'docs/MIGRATION.md': 'Historical names needed for manual migration.',
     'tests/test_brand_audit.py': 'The audit pattern and its documented exceptions.',
     'tests/test_rebranding.py': 'Negative CLI/configuration compatibility regression cases.',
     'tests/test_module_resolution.py': 'Negative fallback and collision regression fixtures.',
@@ -38,8 +35,6 @@ for name in sorted(set(paths)):
     matches = list(retired.finditer(text))
     if matches:
         assert name in allowed, f'Unexplained retired identifier: {name}'
-        if name == 'README.md':
-            assert not retired.search(text.split('## History')[0])
         print(f'{name}: {len(matches)} matches — {allowed[name]}')
 print('BRAND_AUDIT_OK')
 

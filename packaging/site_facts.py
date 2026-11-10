@@ -53,6 +53,9 @@ PATTERNS = {
 
 
 DOCUMENT_PATTERNS = {
+    "site/builder/index.html": {"version": [
+        r'(<span data-runtime-version>)([\d.]+)(</span>)',
+    ]},
     "resources/version.svg": {"version": [
         r'(aria-label="version: )([\d.]+)(")',
         r'(<title>version: )([\d.]+)(</title>)',
